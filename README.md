@@ -1,11 +1,16 @@
 # Medical'ia — Accès aux Soins par l'IA
 
-![Statut](https://img.shields.io/badge/Statut-En%20cours-yellow)
+![Statut](https://img.shields.io/badge/Statut-En%20cours%20de%20développement-orange)
 ![Type](https://img.shields.io/badge/Type-HealthTech-teal)
 ![Formation](https://img.shields.io/badge/Formation-ASRC-green)
 ![École](https://img.shields.io/badge/%C3%89cole-IMIE--Paris-orange)
+![Frontend](https://img.shields.io/badge/Frontend-Disponible-brightgreen)
 
-Projet **Medical'ia** — Plateforme d'intelligence artificielle pour faciliter l'accès aux soins dans les zones sous-desservies.
+> ⚠️ **Projet en cours de développement** — Le frontend est fonctionnel. Les fonctionnalités IA, la base de données et les API de géolocalisation sont en cours d'intégration.
+
+Projet **Medical'ia** (nom de marque : **Mozes'IA**) — Plateforme d'intelligence artificielle pour faciliter l'accès aux soins dans les zones sous-desservies.
+
+🔗 **Démo frontend** : [carmand237.github.io/medalia-healthtech](https://carmand237.github.io/medalia-healthtech)
 
 ---
 
@@ -24,12 +29,14 @@ Medical'ia vise à réduire les inégalités d'accès aux soins en proposant une
 
 ---
 
-## Solution
+## Frontend — Pages disponibles
 
-Plateforme intelligente combinant :
-- **Moteur d'orientation IA** : analyse des symptômes et orientation vers le professionnel adapté
-- **Géolocalisation des ressources de santé** : carte interactive des structures disponibles (urgences, spécialistes, généralistes, téléconsultation)
-- **Gestion de données de santé sécurisée** : conformité HDS (Hébergeur de Données de Santé) et RGPD
+| Page | Fichier | Description |
+|------|---------|-------------|
+| Accueil | `index.html` | Landing page — choix du profil utilisateur |
+| Espace Patient | `patient.html` | Chatbot IA, recherche médecin, carte soins |
+| Espace Médecin | `medecin.html` | Agenda, gestion patientèle, disponibilités |
+| Espace Collectivité | `collectivite.html` | Tableau de bord territorial, indice désert médical |
 
 ---
 
@@ -38,24 +45,36 @@ Plateforme intelligente combinant :
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                    Couche Présentation                    │
-│         Web App (React)  ·  Mobile App (PWA)             │
+│         Web App (HTML/Tailwind)  ·  Mobile App (PWA)     │
 └───────────────────────────┬──────────────────────────────┘
                             │ HTTPS / API REST
 ┌───────────────────────────▼──────────────────────────────┐
-│                    Couche Application                     │
+│                    Couche Application  [EN COURS]        │
 │   Moteur IA d'orientation  ·  API Ressources de Santé    │
 │   Gestion utilisateurs (IAM)  ·  Notifications           │
 └───────────────────────────┬──────────────────────────────┘
                             │
 ┌───────────────────────────▼──────────────────────────────┐
-│                    Couche Données                         │
+│                    Couche Données  [EN COURS]            │
 │   Base de données patients (chiffrée)                    │
 │   Dataset structures de santé (~1 306 entrées, 132 cols) │
 │   Logs d'accès (traçabilité RGPD)                        │
 └──────────────────────────────────────────────────────────┘
 ```
 
-## Sécurité & Conformité
+## Roadmap
+
+| Phase | Contenu | Statut |
+|-------|---------|--------|
+| Phase 1 — Frontend | Pages index, patient, médecin, collectivité | ✅ Terminé |
+| Phase 2 — Backend API | Endpoints REST, authentification, IAM | 🔄 En cours |
+| Phase 3 — Moteur IA | Chatbot orientation, NLP, classification | 🔄 En cours |
+| Phase 4 — Data | Intégration dataset santé, géolocalisation temps réel | 📅 Prévu |
+| Phase 5 — Conformité | Certification HDS, audit RGPD | 📅 Prévu |
+
+---
+
+## Sécurité & Conformité (cible)
 
 | Exigence | Implémentation |
 |----------|----------------|
@@ -67,31 +86,10 @@ Plateforme intelligente combinant :
 
 ---
 
-## Dataset
-
-Exploitation d'un dataset de structures de santé françaises :
-- **~1 306 entrées** sur les urgences et spécialités
-- **132 colonnes** : localisation, spécialités disponibles, horaires, capacités
-- Source : données publiques Santé Publique France / data.gouv.fr
-
----
-
 ## Branding
 
 Noms finalistes explorés lors de la phase de conception :
-`Viciné` · `Sanori` · `Oraya` · `Curia` → **Medical'ia** retenu
-
----
-
-## Équipe & Rôles
-
-| Rôle | Responsabilité |
-|------|----------------|
-| Architecture SI & Sécurité | Infrastructure, conformité HDS/RGPD, IAM |
-| Développement IA | Moteur d'orientation, traitement du langage naturel |
-| Data Engineering | Pipeline de données, dataset structures de santé |
-| UX/UI | Interface patient, accessibilité, parcours utilisateur |
-| Communication | Branding, réseaux sociaux, partenariats médicaux |
+`Viciné` · `Sanori` · `Oraya` · `Curia` → **Medical'ia / Mozes'IA** retenu
 
 ---
 
@@ -100,15 +98,18 @@ Noms finalistes explorés lors de la phase de conception :
 ```
 medalia-healthtech/
 ├── README.md
+├── index.html          ← Landing page (choix profil)
+├── patient.html        ← Espace patient
+├── medecin.html        ← Espace médecin
+├── collectivite.html   ← Espace collectivité
 ├── docs/
-│   ├── cahier-des-charges.md   ← Spécifications fonctionnelles
-│   ├── architecture-si.md      ← Architecture technique cible
-│   └── conformite-hds-rgpd.md  ← Analyse de conformité
+│   ├── cahier-des-charges.md
+│   ├── architecture-si.md
+│   └── conformite-hds-rgpd.md
 ├── data/
-│   └── dataset-structures-sante/  ← Exploration du dataset
-├── design/
-│   └── branding/               ← Charte graphique, logos
-└── schemas/                    ← Diagrammes d'architecture
+│   └── dataset-structures-sante/
+└── design/
+    └── branding/
 ```
 
 ---
