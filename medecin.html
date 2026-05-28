@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mozes'IA — Espace Médecin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bleu: #2B3F7A;
+    --bleu-clair: #3B5299;
+    --teal: #2BA89A;
+    --teal-fonce: #1E7A70;
+    --gris-fond: #F4F6FA;
+  }
+  body {
+    font-family: 'Manrope', system-ui, sans-serif;
+    background: var(--gris-fond);
+    -webkit-font-smoothing: antialiased;
+  }
+  .display { font-family: 'Plus Jakarta Sans', sans-serif; }
+  
+  .logo-pin {
+    width: 36px; height: 36px;
+    background: var(--bleu);
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .logo-pin::after {
+    content: '+';
+    color: var(--teal);
+    font-weight: 900;
+    transform: rotate(45deg);
+    font-size: 18px;
+  }
+  
+  /* Sidebar */
+  .sidebar {
+    background: white;
+    border-right: 1px solid #E5E7EB;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-radius: 10px;
+    color: #4B5563;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 4px;
+  }
+  .nav-item:hover { background: #F4F6FA; color: var(--bleu); }
+  .nav-item.active {
+    background: linear-gradient(135deg, #2B3F7A, #3B5299);
+    color: white;
+    box-shadow: 0 4px 12px rgba(43, 63, 122, 0.25);
+  }
+  
+  .stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid #E5E7EB;
+  }
+  
+  .rdv-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    border: 1px solid #E5E7EB;
+    transition: all 0.2s;
+  }
+  .rdv-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(43, 63, 122, 0.08);
+  }
+  
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge-pending { background: #FEF3C7; color: #92400E; }
+  .badge-confirmed { background: #DCFCE7; color: #166534; }
+  .badge-cancelled { background: #FEE2E2; color: #991B1B; }
+  
+  /* Calendar */
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    background: #E5E7EB;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .cal-cell {
+    background: white;
+    aspect-ratio: 1;
+    padding: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.15s;
+  }
+  .cal-cell:hover { background: #F4F6FA; }
+  .cal-cell.has-rdv { background: #E6F7F4; }
+  .cal-cell.today { background: var(--teal); color: white; font-weight: 700; }
+  .cal-cell .num { font-weight: 600; }
+  .cal-cell .dot { width: 6px; height: 6px; background: var(--bleu); border-radius: 50%; margin-top: 2px; }
+  
+  /* Animations */
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide-up { animation: slideUp 0.4s ease-out both; }
+  
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  
+  .custom-scroll::-webkit-scrollbar { width: 6px; }
+  .custom-scroll::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+  
+  /* Responsive sidebar */
+  @media (max-width: 1024px) {
+    .sidebar {
+      position: fixed;
+      top: 0; left: -280px;
+      bottom: 0;
+      width: 260px;
+      z-index: 50;
+      transition: left 0.3s ease;
+    }
+    .sidebar.open { left: 0; }
+    .main-content { margin-left: 0 !important; }
+  }
+</style>
+</head>
+
+<body class="min-h-screen">
+
+<!-- Mobile menu button -->
+<button id="mobile-menu" class="lg:hidden fixed top-4 left-4 z-40 bg-white p-2 rounded-lg shadow-md">
+  <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+</button>
+
+<!-- Sidebar -->
+<aside class="sidebar fixed top-0 left-0 bottom-0 w-64 p-5 overflow-y-auto custom-scroll z-40">
+  
+  <a href="index.html" class="flex items-center gap-3 mb-8">
+    <div class="logo-pin"></div>
+    <div>
+      <div class="display font-extrabold text-lg" style="color: var(--bleu)">
+        mozes<span style="color: var(--teal)">'IA</span>
+      </div>
+      <div class="text-xs" style="color: #888;">Espace médecin</div>
+    </div>
+  </a>
+  
+  <!-- Profil card -->
+  <div class="rounded-xl p-4 mb-6" style="background: linear-gradient(135deg, #2B3F7A, #3B5299);">
+    <div class="flex items-center gap-3">
+      <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white" style="background: var(--teal);">AK</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-white font-bold text-sm truncate">Dr. KEITA Aminata</div>
+        <div class="text-xs opacity-80 text-white">Médecine générale</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Navigation -->
+  <nav>
+    <p class="text-xs font-bold uppercase tracking-wider mb-3 px-2" style="color: #94A3B8;">Principal</p>
+    <a class="nav-item active" data-tab="dashboard">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Tableau de bord
+    </a>
+    <a class="nav-item" data-tab="rdv">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      Demandes de RDV
+      <span class="ml-auto text-xs font-bold rounded-full px-2 py-0.5" style="background: var(--teal); color: white;">5</span>
+    </a>
+    <a class="nav-item" data-tab="agenda">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Agenda
+    </a>
+    <a class="nav-item" data-tab="patients">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+      Patientèle
+    </a>
+    
+    <p class="text-xs font-bold uppercase tracking-wider mb-3 px-2 mt-6" style="color: #94A3B8;">Configuration</p>
+    <a class="nav-item" data-tab="dispo">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      Disponibilité
+    </a>
+    <a class="nav-item" data-tab="profil">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+      Mon profil
+    </a>
+  </nav>
+</aside>
+
+<!-- Main content -->
+<main class="main-content lg:ml-64 min-h-screen p-4 md:p-8">
+
+<!-- ===== DASHBOARD ===== -->
+<div id="tab-dashboard" class="tab-content active slide-up">
+  <div class="mb-8 mt-12 lg:mt-0">
+    <p class="text-sm uppercase font-bold tracking-wider mb-1" style="color: var(--teal);">Bonjour, Dr. KEITA</p>
+    <h1 class="display text-3xl md:text-4xl font-extrabold" style="color: var(--bleu);">Tableau de bord</h1>
+    <p style="color: #666;">Voici un aperçu de votre activité aujourd'hui — Mardi 28 avril 2026</p>
+  </div>
+  
+  <!-- KPI grid -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">RDV aujourd'hui</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--bleu);">8</p>
+      <p class="text-xs mt-2" style="color: var(--teal);">▲ 2 vs hier</p>
+    </div>
+    
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Demandes en attente</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--teal);">5</p>
+      <p class="text-xs mt-2" style="color: #888;">À traiter</p>
+    </div>
+    
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Patientèle active</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--bleu);">847</p>
+      <p class="text-xs mt-2" style="color: #888;">Patients réguliers</p>
+    </div>
+    
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Note moyenne</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--bleu);">4.8</p>
+      <p class="text-xs mt-2" style="color: #F59E0B;">★★★★★ (124 avis)</p>
+    </div>
+  </div>
+  
+  <!-- Demandes récentes -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="display text-xl font-bold" style="color: var(--bleu);">Demandes récentes</h2>
+        <button onclick="setTab('rdv')" class="text-sm font-semibold" style="color: var(--teal);">Tout voir →</button>
+      </div>
+      <div id="recent-requests" class="space-y-3">
+        <!-- Rempli par JS -->
+      </div>
+    </div>
+    
+    <div>
+      <h2 class="display text-xl font-bold mb-4" style="color: var(--bleu);">Aujourd'hui</h2>
+      <div id="today-rdv" class="space-y-3">
+        <!-- Rempli par JS -->
+      </div>
+    </div>
+  </div>
+  
+  <!-- Statistiques d'activité -->
+  <div class="mt-8 stat-card">
+    <h3 class="display text-lg font-bold mb-4" style="color: var(--bleu);">Activité de la semaine</h3>
+    <div class="flex items-end justify-between gap-2 h-40">
+      <div class="flex-1 flex flex-col items-center gap-2">
+        <div class="w-full rounded-t-lg" style="background: var(--teal); height: 60%;"></div>
+        <p class="text-xs font-semibold" style="color: #666;">Lun</p>
+      </div>
+      <div class="flex-1 flex flex-col items-center gap-2">
+        <div class="w-full rounded-t-lg" style="background: var(--teal); height: 75%;"></div>
+        <p class="text-xs font-semibold" style="color: #666;">Mar</p>
+      </div>
+      <div class="flex-1 flex flex-col items-center gap-2">
+        <div class="w-full rounded-t-lg" style="background: var(--teal); height: 90%;"></div>
+        <p class="text-xs font-semibold" style="color: #666;">Mer</p>
+      </div>
+      <div class="flex-1 flex flex-col items-center gap-2">
+        <div class="w-full rounded-t-lg" style="background: var(--teal); height: 70%;"></div>
+        <p class="text-xs font-semibold" style="color: #666;">Jeu</p>
+      </div>
+      <div class="flex-1 flex flex-col items-center gap-2">
+        <div class="w-full rounded-t-lg" style="background: var(--teal); height: 85%;"></div>
+        <p class="text-xs font-semibold" style="color: #666;">Ven</p>
+      </div>
+      <div class="flex-1 flex flex-col items-center gap-2">
+        <div class="w-full rounded-t-lg" style="background: var(--bleu); opacity: 0.3; height: 30%;"></div>
+        <p class="text-xs font-semibold" style="color: #666;">Sam</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DEMANDES DE RDV ===== -->
+<div id="tab-rdv" class="tab-content slide-up">
+  <div class="mb-8 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Demandes de rendez-vous</h1>
+    <p style="color: #666;">Validez ou refusez les demandes en attente</p>
+  </div>
+  
+  <!-- Filtres -->
+  <div class="bg-white rounded-xl p-3 mb-6 flex gap-2 overflow-x-auto">
+    <button onclick="filterRdv('all')" class="filter-rdv-btn px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap active-rdv-filter" data-status="all">
+      Toutes (8)
+    </button>
+    <button onclick="filterRdv('pending')" class="filter-rdv-btn px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap" data-status="pending">
+      En attente (5)
+    </button>
+    <button onclick="filterRdv('confirmed')" class="filter-rdv-btn px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap" data-status="confirmed">
+      Confirmées (2)
+    </button>
+    <button onclick="filterRdv('cancelled')" class="filter-rdv-btn px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap" data-status="cancelled">
+      Refusées (1)
+    </button>
+  </div>
+  
+  <div id="rdv-list" class="space-y-3">
+    <!-- Rempli par JS -->
+  </div>
+</div>
+
+<!-- ===== AGENDA ===== -->
+<div id="tab-agenda" class="tab-content slide-up">
+  <div class="mb-8 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Mon agenda</h1>
+    <p style="color: #666;">Avril 2026</p>
+  </div>
+  
+  <div class="bg-white rounded-2xl p-6 mb-6">
+    <div class="grid grid-cols-7 gap-2 text-center text-xs font-bold uppercase mb-2" style="color: #94A3B8;">
+      <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+    </div>
+    <div class="calendar-grid" id="calendar-grid">
+      <!-- Rempli par JS -->
+    </div>
+  </div>
+  
+  <h2 class="display text-xl font-bold mb-4" style="color: var(--bleu);">Prochains rendez-vous</h2>
+  <div class="space-y-3">
+    <div class="rdv-card flex items-center gap-4">
+      <div class="w-14 text-center">
+        <div class="text-xs font-bold" style="color: #94A3B8;">AVR</div>
+        <div class="display text-2xl font-extrabold" style="color: var(--bleu);">28</div>
+      </div>
+      <div class="flex-1 border-l pl-4">
+        <p class="font-bold" style="color: var(--bleu);">Mme DUBOIS Hélène</p>
+        <p class="text-sm" style="color: #666;">Consultation suivi · 14h30</p>
+      </div>
+      <span class="badge badge-confirmed">Confirmé</span>
+    </div>
+    
+    <div class="rdv-card flex items-center gap-4">
+      <div class="w-14 text-center">
+        <div class="text-xs font-bold" style="color: #94A3B8;">AVR</div>
+        <div class="display text-2xl font-extrabold" style="color: var(--bleu);">29</div>
+      </div>
+      <div class="flex-1 border-l pl-4">
+        <p class="font-bold" style="color: var(--bleu);">M. BERNARD Jean</p>
+        <p class="text-sm" style="color: #666;">Première visite · 10h00</p>
+      </div>
+      <span class="badge badge-confirmed">Confirmé</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PATIENTÈLE ===== -->
+<div id="tab-patients" class="tab-content slide-up">
+  <div class="mb-8 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Ma patientèle</h1>
+    <p style="color: #666;">847 patients suivis · Dernière mise à jour aujourd'hui</p>
+  </div>
+  
+  <div class="bg-white rounded-xl p-3 mb-4 flex gap-3 items-center">
+    <input type="text" placeholder="Rechercher un patient..." class="flex-1 px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-teal-500" style="border-color: #E5E7EB;">
+    <button class="px-4 py-2 rounded-lg text-sm font-semibold text-white" style="background: var(--teal);">+ Nouveau patient</button>
+  </div>
+  
+  <div class="space-y-3" id="patients-list">
+    <!-- Rempli par JS -->
+  </div>
+</div>
+
+<!-- ===== DISPONIBILITÉ ===== -->
+<div id="tab-dispo" class="tab-content slide-up">
+  <div class="mb-8 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Configuration de la disponibilité</h1>
+    <p style="color: #666;">Indiquez si vous prenez de nouveaux patients et vos créneaux de RDV</p>
+  </div>
+  
+  <!-- Toggle nouveaux patients -->
+  <div class="bg-white rounded-2xl p-6 mb-6">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h3 class="display text-lg font-bold mb-1" style="color: var(--bleu);">Acceptez-vous de nouveaux patients ?</h3>
+        <p class="text-sm" style="color: #666;">Cette information est cruciale pour Mozes'IA — elle s'affichera aux patients qui cherchent un médecin traitant.</p>
+      </div>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="toggle-nouveaux" class="sr-only peer" checked>
+        <div class="w-14 h-7 rounded-full peer-focus:ring-4 peer-focus:ring-teal-200 bg-gray-200 peer-checked:bg-teal-500 transition-colors"></div>
+        <div class="absolute top-1 left-1 bg-white w-5 h-5 rounded-full transition-transform peer-checked:translate-x-7 shadow"></div>
+      </label>
+    </div>
+    <div class="mt-4 p-3 rounded-lg" style="background: #DCFCE7;">
+      <p class="text-sm font-semibold" style="color: #166534;">✓ Vous apparaissez dans les recherches de médecin traitant</p>
+    </div>
+  </div>
+  
+  <!-- Délai de RDV -->
+  <div class="bg-white rounded-2xl p-6 mb-6">
+    <h3 class="display text-lg font-bold mb-4" style="color: var(--bleu);">Délai moyen pour un nouveau RDV</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <button class="p-4 rounded-xl border-2 transition" style="border-color: var(--teal); background: #E6F7F4;">
+        <div class="text-2xl font-bold" style="color: var(--teal);">3-7j</div>
+        <div class="text-xs mt-1" style="color: #666;">Rapide ✓</div>
+      </button>
+      <button class="p-4 rounded-xl border-2 hover:border-teal-300 transition" style="border-color: #E5E7EB;">
+        <div class="text-2xl font-bold" style="color: var(--bleu);">1-2 sem</div>
+        <div class="text-xs mt-1" style="color: #666;">Modéré</div>
+      </button>
+      <button class="p-4 rounded-xl border-2 hover:border-teal-300 transition" style="border-color: #E5E7EB;">
+        <div class="text-2xl font-bold" style="color: var(--bleu);">2-4 sem</div>
+        <div class="text-xs mt-1" style="color: #666;">Long</div>
+      </button>
+      <button class="p-4 rounded-xl border-2 hover:border-teal-300 transition" style="border-color: #E5E7EB;">
+        <div class="text-2xl font-bold" style="color: var(--bleu);">+1 mois</div>
+        <div class="text-xs mt-1" style="color: #666;">Très long</div>
+      </button>
+    </div>
+  </div>
+  
+  <!-- Horaires -->
+  <div class="bg-white rounded-2xl p-6">
+    <h3 class="display text-lg font-bold mb-4" style="color: var(--bleu);">Horaires de consultation</h3>
+    <div class="space-y-2">
+      <div class="flex items-center gap-4 py-2 border-b">
+        <span class="w-24 font-semibold" style="color: var(--bleu);">Lundi</span>
+        <span class="flex-1 text-sm" style="color: #666;">8h30 - 12h00 · 14h00 - 18h30</span>
+        <button class="text-sm font-semibold" style="color: var(--teal);">Modifier</button>
+      </div>
+      <div class="flex items-center gap-4 py-2 border-b">
+        <span class="w-24 font-semibold" style="color: var(--bleu);">Mardi</span>
+        <span class="flex-1 text-sm" style="color: #666;">8h30 - 12h00 · 14h00 - 18h30</span>
+        <button class="text-sm font-semibold" style="color: var(--teal);">Modifier</button>
+      </div>
+      <div class="flex items-center gap-4 py-2 border-b">
+        <span class="w-24 font-semibold" style="color: var(--bleu);">Mercredi</span>
+        <span class="flex-1 text-sm" style="color: #666;">8h30 - 12h00</span>
+        <button class="text-sm font-semibold" style="color: var(--teal);">Modifier</button>
+      </div>
+      <div class="flex items-center gap-4 py-2 border-b">
+        <span class="w-24 font-semibold" style="color: var(--bleu);">Jeudi</span>
+        <span class="flex-1 text-sm" style="color: #666;">8h30 - 12h00 · 14h00 - 18h30</span>
+        <button class="text-sm font-semibold" style="color: var(--teal);">Modifier</button>
+      </div>
+      <div class="flex items-center gap-4 py-2 border-b">
+        <span class="w-24 font-semibold" style="color: var(--bleu);">Vendredi</span>
+        <span class="flex-1 text-sm" style="color: #666;">8h30 - 12h00 · 14h00 - 17h00</span>
+        <button class="text-sm font-semibold" style="color: var(--teal);">Modifier</button>
+      </div>
+      <div class="flex items-center gap-4 py-2 border-b">
+        <span class="w-24 font-semibold" style="color: var(--bleu);">Samedi</span>
+        <span class="flex-1 text-sm text-gray-400">Fermé</span>
+        <button class="text-sm font-semibold" style="color: var(--teal);">Modifier</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROFIL ===== -->
+<div id="tab-profil" class="tab-content slide-up">
+  <div class="mb-8 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Mon profil</h1>
+    <p style="color: #666;">Vos informations affichées aux patients</p>
+  </div>
+  
+  <div class="bg-white rounded-2xl p-6 md:p-8">
+    
+    <div class="flex items-center gap-6 mb-8 pb-6 border-b">
+      <div class="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold" style="background: linear-gradient(135deg, #2BA89A, #1E7A70);">AK</div>
+      <div>
+        <h2 class="display text-2xl font-bold" style="color: var(--bleu);">Dr. KEITA Aminata</h2>
+        <p style="color: #666;">Médecine générale</p>
+        <p class="text-sm mt-1" style="color: #888;">RPPS : 10000123456</p>
+      </div>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider mb-1" style="color: var(--bleu);">Nom</label>
+        <input value="KEITA" class="w-full px-3 py-2 rounded-lg border" style="border-color: #E5E7EB;">
+      </div>
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider mb-1" style="color: var(--bleu);">Prénom</label>
+        <input value="Aminata" class="w-full px-3 py-2 rounded-lg border" style="border-color: #E5E7EB;">
+      </div>
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider mb-1" style="color: var(--bleu);">Téléphone</label>
+        <input value="01 47 92 38 14" class="w-full px-3 py-2 rounded-lg border" style="border-color: #E5E7EB;">
+      </div>
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider mb-1" style="color: var(--bleu);">Email</label>
+        <input value="dr.keita@cabinet-gennevilliers.fr" class="w-full px-3 py-2 rounded-lg border" style="border-color: #E5E7EB;">
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs font-bold uppercase tracking-wider mb-1" style="color: var(--bleu);">Adresse du cabinet</label>
+        <input value="12 rue Henri Barbusse, 92230 Gennevilliers" class="w-full px-3 py-2 rounded-lg border" style="border-color: #E5E7EB;">
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs font-bold uppercase tracking-wider mb-1" style="color: var(--bleu);">Présentation aux patients</label>
+        <textarea rows="3" class="w-full px-3 py-2 rounded-lg border" style="border-color: #E5E7EB;">Médecin généraliste depuis 2010, accompagnement de tous âges. Spécialisée en pédiatrie et suivi des maladies chroniques. Consultations en français et anglais.</textarea>
+      </div>
+    </div>
+    
+    <div class="mt-6 flex gap-3 justify-end">
+      <button class="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-sm">Annuler</button>
+      <button class="px-5 py-2.5 rounded-xl text-white font-semibold text-sm" style="background: var(--teal);">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+// === DONNÉES DEMOS ===
+const RDV_DATA = [
+  { id: 1, patient: "DUBOIS Hélène", age: 52, motif: "Suivi tension artérielle", date: "2026-04-30", heure: "14h30", status: "pending", message: "Bonjour Docteur, je voudrais un suivi de ma tension. Mon dernier contrôle remonte à 3 mois." },
+  { id: 2, patient: "LEROY Marc", age: 38, motif: "Première consultation", date: "2026-05-02", heure: "10h00", status: "pending", message: "Je cherche un nouveau médecin traitant suite à mon déménagement à Gennevilliers." },
+  { id: 3, patient: "BERNARD Sophie", age: 29, motif: "Renouvellement ordonnance", date: "2026-05-03", heure: "09h15", status: "pending", message: "Renouvellement pour traitement chronique. Pas d'urgence." },
+  { id: 4, patient: "MARTIN Lucas", age: 7, motif: "Vaccination", date: "2026-05-05", heure: "14h00", status: "pending", message: "Vaccination de rappel pour mon fils." },
+  { id: 5, patient: "PETIT Inès", age: 45, motif: "Toux persistante", date: "2026-04-29", heure: "11h30", status: "pending", message: "Toux qui dure depuis 10 jours, je commence à m'inquiéter." },
+  { id: 6, patient: "MOREAU Pierre", age: 67, motif: "Suivi diabète", date: "2026-04-28", heure: "16h00", status: "confirmed", message: "" },
+  { id: 7, patient: "ROUX Camille", age: 33, motif: "Fatigue chronique", date: "2026-05-04", heure: "15h30", status: "confirmed", message: "" },
+  { id: 8, patient: "GIRARD Laurent", age: 55, motif: "Examen général", date: "2026-04-27", heure: "10h30", status: "cancelled", message: "" }
+];
+
+const PATIENTS_DATA = [
+  { nom: "DUBOIS", prenom: "Hélène", age: 52, derniereVisite: "Il y a 2 mois", pathologie: "Hypertension" },
+  { nom: "MOREAU", prenom: "Pierre", age: 67, derniereVisite: "Il y a 3 semaines", pathologie: "Diabète type 2" },
+  { nom: "ROUX", prenom: "Camille", age: 33, derniereVisite: "Il y a 1 mois", pathologie: "Suivi général" },
+  { nom: "LEROY", prenom: "Marc", age: 38, derniereVisite: "Première visite", pathologie: "—" },
+  { nom: "BERNARD", prenom: "Sophie", age: 29, derniereVisite: "Il y a 6 mois", pathologie: "Asthme" },
+  { nom: "MARTIN", prenom: "Lucas", age: 7, derniereVisite: "Il y a 2 semaines", pathologie: "Pédiatrie" },
+];
+
+let currentRdvFilter = 'all';
+
+// === TAB MANAGEMENT ===
+function setTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  
+  if (window.innerWidth < 1024) document.querySelector('.sidebar').classList.remove('open');
+  
+  if (tab === 'patients') renderPatients();
+  if (tab === 'agenda') renderCalendar();
+}
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => setTab(el.dataset.tab));
+});
+
+document.getElementById('mobile-menu').addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.toggle('open');
+});
+
+// === DASHBOARD ===
+function renderDashboard() {
+  const pending = RDV_DATA.filter(r => r.status === 'pending').slice(0, 3);
+  document.getElementById('recent-requests').innerHTML = pending.map(r => `
+    <div class="rdv-card">
+      <div class="flex items-start justify-between gap-3 mb-2">
+        <div>
+          <p class="font-bold" style="color: var(--bleu);">${r.patient}</p>
+          <p class="text-xs" style="color: #666;">${r.age} ans · ${r.motif}</p>
+        </div>
+        <span class="badge badge-pending">En attente</span>
+      </div>
+      <p class="text-sm mb-3" style="color: #666;">${r.date} à ${r.heure}</p>
+      <div class="flex gap-2">
+        <button onclick="acceptRdv(${r.id})" class="flex-1 py-2 rounded-lg text-white text-xs font-semibold" style="background: var(--teal);">✓ Accepter</button>
+        <button onclick="rejectRdv(${r.id})" class="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold">Refuser</button>
+      </div>
+    </div>
+  `).join('');
+  
+  const today = RDV_DATA.filter(r => r.date === '2026-04-28' && r.status === 'confirmed');
+  document.getElementById('today-rdv').innerHTML = today.length ? today.map(r => `
+    <div class="rdv-card">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white" style="background: var(--bleu);">${r.heure.split('h')[0]}h</div>
+        <div class="flex-1">
+          <p class="font-bold" style="color: var(--bleu);">${r.patient}</p>
+          <p class="text-xs" style="color: #666;">${r.motif}</p>
+        </div>
+        <span class="badge badge-confirmed">Confirmé</span>
+      </div>
+    </div>
+  `).join('') : '<p class="text-sm text-gray-500 text-center py-8">Aucun rendez-vous prévu aujourd\\'hui</p>';
+}
+
+// === RDV ===
+function filterRdv(status) {
+  currentRdvFilter = status;
+  document.querySelectorAll('.filter-rdv-btn').forEach(b => {
+    if (b.dataset.status === status) {
+      b.style.background = 'var(--teal)';
+      b.style.color = 'white';
+    } else {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--bleu)';
+    }
+  });
+  renderRdvList();
+}
+
+function renderRdvList() {
+  const list = currentRdvFilter === 'all' ? RDV_DATA : RDV_DATA.filter(r => r.status === currentRdvFilter);
+  document.getElementById('rdv-list').innerHTML = list.map(r => {
+    const badge = r.status === 'pending' ? 'badge-pending' : r.status === 'confirmed' ? 'badge-confirmed' : 'badge-cancelled';
+    const badgeText = r.status === 'pending' ? 'En attente' : r.status === 'confirmed' ? 'Confirmé' : 'Refusé';
+    return `
+      <div class="rdv-card">
+        <div class="flex items-start justify-between gap-3 mb-2 flex-wrap">
+          <div>
+            <p class="font-bold" style="color: var(--bleu);">${r.patient}</p>
+            <p class="text-xs" style="color: #666;">${r.age} ans · ${r.motif}</p>
+          </div>
+          <span class="badge ${badge}">${badgeText}</span>
+        </div>
+        <p class="text-sm" style="color: #666;">📅 ${r.date} à ${r.heure}</p>
+        ${r.message ? `<div class="mt-3 p-3 rounded-lg text-sm" style="background: #F4F6FA; color: #444;"><em>"${r.message}"</em></div>` : ''}
+        ${r.status === 'pending' ? `
+          <div class="flex gap-2 mt-3">
+            <button onclick="acceptRdv(${r.id})" class="flex-1 py-2 rounded-lg text-white text-sm font-semibold" style="background: var(--teal);">✓ Accepter</button>
+            <button onclick="rejectRdv(${r.id})" class="px-4 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold">Refuser</button>
+            <button class="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-semibold">Reporter</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function acceptRdv(id) {
+  const r = RDV_DATA.find(x => x.id === id);
+  if (r) {
+    r.status = 'confirmed';
+    renderRdvList();
+    renderDashboard();
+    showToast(`✓ RDV confirmé avec ${r.patient}`);
+  }
+}
+
+function rejectRdv(id) {
+  if (!confirm('Refuser ce rendez-vous ?')) return;
+  const r = RDV_DATA.find(x => x.id === id);
+  if (r) {
+    r.status = 'cancelled';
+    renderRdvList();
+    renderDashboard();
+    showToast(`✗ RDV refusé`);
+  }
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'fixed bottom-6 right-6 px-5 py-3 rounded-xl text-white font-semibold shadow-lg z-50';
+  t.style.background = 'var(--teal)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// === PATIENTS ===
+function renderPatients() {
+  document.getElementById('patients-list').innerHTML = PATIENTS_DATA.map(p => `
+    <div class="bg-white rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-shadow">
+      <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white" style="background: var(--bleu);">${p.prenom.charAt(0)}${p.nom.charAt(0)}</div>
+      <div class="flex-1 min-w-0">
+        <p class="font-bold" style="color: var(--bleu);">${p.nom} ${p.prenom}</p>
+        <p class="text-xs" style="color: #888;">${p.age} ans · ${p.pathologie}</p>
+      </div>
+      <div class="text-right hidden md:block">
+        <p class="text-xs font-bold" style="color: #888;">DERNIÈRE VISITE</p>
+        <p class="text-sm" style="color: #444;">${p.derniereVisite}</p>
+      </div>
+      <button class="px-3 py-1.5 rounded-lg text-xs font-semibold" style="background: #F4F6FA; color: var(--bleu);">Dossier</button>
+    </div>
+  `).join('');
+}
+
+// === CALENDAR ===
+function renderCalendar() {
+  const today = 28; // 28 avril 2026
+  const daysInMonth = 30;
+  const firstDay = 2; // mardi (0=lundi)
+  const rdvDays = [28, 29, 30, 2, 3, 5];
+  
+  let html = '';
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell" style="background:#F9FAFB;"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    let classes = 'cal-cell';
+    if (d === today) classes += ' today';
+    else if (rdvDays.includes(d)) classes += ' has-rdv';
+    
+    html += `<div class="${classes}">
+      <span class="num">${d}</span>
+      ${rdvDays.includes(d) && d !== today ? '<span class="dot"></span>' : ''}
+    </div>`;
+  }
+  document.getElementById('calendar-grid').innerHTML = html;
+}
+
+// Init filter buttons style
+document.querySelectorAll('.filter-rdv-btn').forEach(b => {
+  if (b.dataset.status === 'all') {
+    b.style.background = 'var(--teal)';
+    b.style.color = 'white';
+  } else {
+    b.style.color = 'var(--bleu)';
+  }
+});
+
+// === INIT ===
+document.addEventListener('DOMContentLoaded', () => {
+  renderDashboard();
+  renderRdvList();
+});
+</script>
+
+</body>
+</html>
