@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mozes'IA — Espace Collectivité</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+  :root {
+    --bleu: #2B3F7A;
+    --bleu-clair: #3B5299;
+    --teal: #2BA89A;
+    --teal-fonce: #1E7A70;
+    --rouge: #E74C3C;
+    --orange: #F39C12;
+    --vert: #27AE60;
+    --gris-fond: #F4F6FA;
+  }
+  body {
+    font-family: 'Manrope', system-ui, sans-serif;
+    background: var(--gris-fond);
+    -webkit-font-smoothing: antialiased;
+  }
+  .display { font-family: 'Plus Jakarta Sans', sans-serif; }
+  
+  .logo-pin {
+    width: 36px; height: 36px;
+    background: var(--bleu);
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .logo-pin::after {
+    content: '+';
+    color: var(--teal);
+    font-weight: 900;
+    transform: rotate(45deg);
+    font-size: 18px;
+  }
+  
+  .sidebar {
+    background: linear-gradient(180deg, #1E2D5A 0%, #2B3F7A 100%);
+    border-right: 1px solid #1A2447;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-radius: 10px;
+    color: #B4C0D9;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 4px;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.05); color: white; }
+  .nav-item.active {
+    background: var(--teal);
+    color: white;
+    box-shadow: 0 4px 12px rgba(43, 168, 154, 0.3);
+  }
+  
+  .stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid #E5E7EB;
+    transition: all 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+  
+  /* Tab content */
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  
+  /* Map */
+  #map { height: 500px; border-radius: 16px; z-index: 0; }
+  
+  /* Animations */
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide-up { animation: slideUp 0.4s ease-out both; }
+  
+  .custom-scroll::-webkit-scrollbar { width: 6px; }
+  .custom-scroll::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+  
+  /* Responsive sidebar */
+  @media (max-width: 1024px) {
+    .sidebar {
+      position: fixed;
+      top: 0; left: -280px;
+      bottom: 0;
+      width: 260px;
+      z-index: 50;
+      transition: left 0.3s ease;
+    }
+    .sidebar.open { left: 0; }
+    .main-content { margin-left: 0 !important; }
+  }
+  
+  /* Indicateur niveau */
+  .severity-bar {
+    height: 6px;
+    background: #E5E7EB;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .severity-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  
+  /* Heat color */
+  .heat-low { background: #FEE2E2; color: #991B1B; }
+  .heat-mid { background: #FEF3C7; color: #92400E; }
+  .heat-high { background: #DCFCE7; color: #166534; }
+</style>
+</head>
+
+<body class="min-h-screen">
+
+<!-- Mobile menu -->
+<button id="mobile-menu" class="lg:hidden fixed top-4 left-4 z-40 bg-white p-2 rounded-lg shadow-md">
+  <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+</button>
+
+<!-- Sidebar -->
+<aside class="sidebar fixed top-0 left-0 bottom-0 w-64 p-5 overflow-y-auto custom-scroll z-40">
+  
+  <a href="index.html" class="flex items-center gap-3 mb-6">
+    <div class="logo-pin"></div>
+    <div>
+      <div class="display font-extrabold text-lg text-white">
+        mozes<span style="color: var(--teal)">'IA</span>
+      </div>
+      <div class="text-xs" style="color: #B4C0D9;">Espace collectivité</div>
+    </div>
+  </a>
+  
+  <!-- Sélection territoire -->
+  <div class="rounded-xl p-4 mb-6" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+    <p class="text-xs uppercase tracking-wider font-bold mb-2" style="color: #94A3B8;">Territoire</p>
+    <select id="select-territoire" class="w-full bg-transparent text-white font-bold focus:outline-none">
+      <option value="92" style="background: var(--bleu);">Hauts-de-Seine (92)</option>
+      <option value="92036" style="background: var(--bleu);">Gennevilliers</option>
+      <option value="92012" style="background: var(--bleu);">Boulogne-Billancourt</option>
+      <option value="92050" style="background: var(--bleu);">Nanterre</option>
+    </select>
+  </div>
+  
+  <!-- Navigation -->
+  <nav>
+    <p class="text-xs font-bold uppercase tracking-wider mb-3 px-2" style="color: #94A3B8;">Pilotage</p>
+    <a class="nav-item active" data-tab="dashboard">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      Vue d'ensemble
+    </a>
+    <a class="nav-item" data-tab="cartographie">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+      Cartographie
+    </a>
+    <a class="nav-item" data-tab="pathologies">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+      Pathologies
+    </a>
+    <a class="nav-item" data-tab="medecins">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+      Démographie médicale
+    </a>
+    <a class="nav-item" data-tab="hopitaux">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+      Hôpitaux
+    </a>
+    <a class="nav-item" data-tab="deserts">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      Déserts médicaux
+    </a>
+    
+    <p class="text-xs font-bold uppercase tracking-wider mb-3 px-2 mt-6" style="color: #94A3B8;">Outils</p>
+    <a class="nav-item" data-tab="prevision">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+      Prévisions retraites
+    </a>
+    <a class="nav-item" data-tab="rapports">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Rapports
+    </a>
+  </nav>
+</aside>
+
+<!-- Main -->
+<main class="main-content lg:ml-64 min-h-screen p-4 md:p-8">
+
+<!-- ===== DASHBOARD ===== -->
+<div id="tab-dashboard" class="tab-content active slide-up">
+  <div class="mb-6 mt-12 lg:mt-0 flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <p class="text-sm uppercase font-bold tracking-wider mb-1" style="color: var(--teal);">Mairie de Gennevilliers</p>
+      <h1 class="display text-3xl md:text-4xl font-extrabold" id="territoire-name" style="color: var(--bleu);">Hauts-de-Seine — Vue d'ensemble</h1>
+      <p style="color: #666;">Pilotage de l'offre de soins du territoire · Mise à jour 28 avril 2026</p>
+    </div>
+    <button class="px-4 py-2.5 rounded-xl bg-white border-2 font-semibold text-sm flex items-center gap-2" style="border-color: var(--teal); color: var(--teal);">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Exporter rapport
+    </button>
+  </div>
+  
+  <!-- KPIs principaux -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Population</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--bleu);" id="kpi-pop">—</p>
+      <p class="text-xs mt-2" style="color: #888;">habitants (INSEE 2024)</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Pros de santé</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--teal);" id="kpi-pros">—</p>
+      <p class="text-xs mt-2" style="color: #888;">tous types confondus</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Médecins généralistes</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" style="color: var(--bleu);" id="kpi-gen">—</p>
+      <p class="text-xs mt-2" id="kpi-gen-densite" style="color: #888;">— pour 1 000 hab.</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Indice accès aux soins</p>
+      <p class="display text-3xl md:text-4xl font-extrabold mt-1" id="kpi-indice" style="color: var(--bleu);">—</p>
+      <div class="severity-bar mt-2">
+        <div id="kpi-indice-bar" class="severity-fill" style="width: 0%; background: var(--teal);"></div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Carte de chaleur -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="lg:col-span-2 stat-card">
+      <h2 class="display text-lg font-bold mb-4" style="color: var(--bleu);">Densité médecins généralistes par commune</h2>
+      <canvas id="chart-densite" style="max-height: 300px;"></canvas>
+    </div>
+    <div class="stat-card">
+      <h2 class="display text-lg font-bold mb-4" style="color: var(--bleu);">Pyramide des âges médecins</h2>
+      <canvas id="chart-ages" style="max-height: 300px;"></canvas>
+    </div>
+  </div>
+  
+  <!-- Alertes -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    <div class="bg-white rounded-2xl p-5 border-l-4" style="border-color: var(--rouge);">
+      <div class="flex items-center gap-2 mb-2">
+        <svg width="20" height="20" fill="var(--rouge)" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 6l7.53 13H4.47L12 8zm-1 4v4h2v-4h-2zm0 5v2h2v-2h-2z"/></svg>
+        <p class="font-bold" style="color: var(--rouge);">Alerte critique</p>
+      </div>
+      <p class="text-sm mb-2" style="color: #444;">5 communes ont une densité de généralistes &lt; 1 / 1 000 hab.</p>
+      <p class="text-xs font-semibold" style="color: var(--rouge);">Ville-d'Avray, Villeneuve-la-Garenne, La Garenne-Colombes...</p>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border-l-4" style="border-color: var(--orange);">
+      <div class="flex items-center gap-2 mb-2">
+        <svg width="20" height="20" fill="var(--orange)" viewBox="0 0 24 24"><path d="M12 6V4m0 16v-2m6-12l-1.5 1.5M6 18l1.5-1.5M22 12h-2M4 12H2m18 6l-1.5-1.5M6 6L4.5 4.5M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <p class="font-bold" style="color: var(--orange);">Vigilance retraites</p>
+      </div>
+      <p class="text-sm mb-2" style="color: #444;">~30 % des médecins généralistes ont plus de 60 ans.</p>
+      <p class="text-xs font-semibold" style="color: var(--orange);">Anticiper départs sur 5 ans</p>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border-l-4" style="border-color: var(--vert);">
+      <div class="flex items-center gap-2 mb-2">
+        <svg width="20" height="20" fill="var(--vert)" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        <p class="font-bold" style="color: var(--vert);">Bonne couverture</p>
+      </div>
+      <p class="text-sm mb-2" style="color: #444;">12 hôpitaux dotés de service d'urgences sur le territoire.</p>
+      <p class="text-xs font-semibold" style="color: var(--vert);">Délai moyen accès &lt; 15 min</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CARTOGRAPHIE ===== -->
+<div id="tab-cartographie" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Cartographie territoriale</h1>
+    <p style="color: #666;">Visualisation géographique de l'offre de soins</p>
+  </div>
+  
+  <div class="bg-white rounded-2xl p-3 mb-4 flex gap-2 flex-wrap">
+    <button class="map-layer-btn active px-4 py-2 rounded-lg text-sm font-semibold" data-layer="all">
+      Tout afficher
+    </button>
+    <button class="map-layer-btn px-4 py-2 rounded-lg text-sm font-semibold" data-layer="generalistes">
+      🩺 Généralistes
+    </button>
+    <button class="map-layer-btn px-4 py-2 rounded-lg text-sm font-semibold" data-layer="hopitaux">
+      🏥 Hôpitaux
+    </button>
+    <button class="map-layer-btn px-4 py-2 rounded-lg text-sm font-semibold" data-layer="deserts">
+      ⚠️ Zones critiques
+    </button>
+  </div>
+  
+  <div id="map" class="bg-white shadow-sm"></div>
+  
+  <!-- Légende -->
+  <div class="mt-4 bg-white rounded-2xl p-4 flex flex-wrap gap-4 text-sm">
+    <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full" style="background: var(--vert);"></span> Bien doté</div>
+    <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full" style="background: var(--orange);"></span> Sous-doté</div>
+    <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full" style="background: var(--rouge);"></span> Désert médical</div>
+    <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full" style="background: var(--bleu);"></span> Hôpital</div>
+  </div>
+</div>
+
+<!-- ===== PATHOLOGIES ===== -->
+<div id="tab-pathologies" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Pathologies du territoire</h1>
+    <p style="color: #666;">Estimation des pathologies les plus répandues — données issues de la déclaration ALD CNAM</p>
+  </div>
+  
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="stat-card">
+      <h3 class="display font-bold text-lg mb-4" style="color: var(--bleu);">Top pathologies recensées</h3>
+      <canvas id="chart-pathologies" style="max-height: 320px;"></canvas>
+    </div>
+    
+    <div class="stat-card">
+      <h3 class="display font-bold text-lg mb-4" style="color: var(--bleu);">Détail par pathologie</h3>
+      <div id="patho-list" class="space-y-3">
+        <!-- Rempli par JS -->
+      </div>
+    </div>
+  </div>
+  
+  <div class="mt-6 stat-card bg-blue-50 border-l-4" style="border-color: var(--bleu);">
+    <h3 class="display font-bold text-lg mb-2" style="color: var(--bleu);">💡 Insight Mozes'IA</h3>
+    <p style="color: #444;">L'<strong>hypertension artérielle</strong> est la pathologie la plus répandue (15% de la population). Avec un ratio de <strong>1 cardiologue pour 7 800 habitants</strong>, le territoire pourrait bénéficier d'un cardiologue supplémentaire ou d'un centre de cardiologie de proximité. Recommandation : ouvrir une concertation avec l'ARS.</p>
+  </div>
+</div>
+
+<!-- ===== DÉMOGRAPHIE MÉDECINS ===== -->
+<div id="tab-medecins" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Démographie médicale</h1>
+    <p style="color: #666;">Suivi de la population de professionnels de santé</p>
+  </div>
+  
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Âge moyen</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--bleu);" id="age-moyen">—</p>
+      <p class="text-xs mt-2" style="color: #888;">ans · médecins</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">+60 ans</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--orange);">28%</p>
+      <p class="text-xs mt-2" style="color: #888;">proche retraite</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Retraites 5 ans</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--rouge);" id="retraite5ans">—</p>
+      <p class="text-xs mt-2" style="color: #888;">départs prévus</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Nouveaux installés</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--vert);">+12</p>
+      <p class="text-xs mt-2" style="color: #888;">en 2025</p>
+    </div>
+  </div>
+  
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="stat-card">
+      <h3 class="display font-bold text-lg mb-4" style="color: var(--bleu);">Répartition par profession</h3>
+      <canvas id="chart-professions" style="max-height: 300px;"></canvas>
+    </div>
+    <div class="stat-card">
+      <h3 class="display font-bold text-lg mb-4" style="color: var(--bleu);">Évolution de la pyramide des âges</h3>
+      <canvas id="chart-pyramide" style="max-height: 300px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ===== HÔPITAUX ===== -->
+<div id="tab-hopitaux" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Hôpitaux du territoire</h1>
+    <p style="color: #666;">Établissements de santé et capacités d'accueil</p>
+  </div>
+  
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Établissements</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--bleu);" id="kpi-hops">—</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Lits totaux</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--teal);">12 480</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Services urgences</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--bleu);">12</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #94A3B8;">Taux occupation</p>
+      <p class="display text-3xl font-extrabold mt-1" style="color: var(--orange);">82%</p>
+    </div>
+  </div>
+  
+  <div class="bg-white rounded-2xl">
+    <div class="p-4 border-b">
+      <h3 class="display font-bold text-lg" style="color: var(--bleu);">Liste des hôpitaux</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr style="background: var(--gris-fond); color: #666;">
+            <th class="p-3 text-left font-bold uppercase text-xs tracking-wider">Établissement</th>
+            <th class="p-3 text-left font-bold uppercase text-xs tracking-wider">Catégorie</th>
+            <th class="p-3 text-right font-bold uppercase text-xs tracking-wider">Lits</th>
+            <th class="p-3 text-center font-bold uppercase text-xs tracking-wider">Urgences</th>
+            <th class="p-3 text-right font-bold uppercase text-xs tracking-wider">Occupation</th>
+          </tr>
+        </thead>
+        <tbody id="hop-tbody">
+          <!-- Rempli par JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DÉSERTS MÉDICAUX ===== -->
+<div id="tab-deserts" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Détection des déserts médicaux</h1>
+    <p style="color: #666;">Identification des zones sous-dotées et propositions d'action</p>
+  </div>
+  
+  <!-- Score territoire -->
+  <div class="bg-gradient-to-br rounded-2xl p-6 mb-6 text-white" style="background: linear-gradient(135deg, var(--bleu), var(--bleu-clair));">
+    <p class="text-sm uppercase font-bold tracking-wider mb-2 opacity-80">Indice global</p>
+    <div class="flex items-end gap-4">
+      <p class="display text-6xl font-extrabold">B+</p>
+      <div class="pb-2">
+        <p class="text-lg">Couverture moyenne</p>
+        <p class="text-sm opacity-80">5 communes en zone critique sur 36</p>
+      </div>
+    </div>
+  </div>
+  
+  <h3 class="display font-bold text-xl mb-4" style="color: var(--bleu);">Communes en zone critique</h3>
+  
+  <div class="space-y-3" id="deserts-list">
+    <!-- Rempli par JS -->
+  </div>
+  
+  <!-- Recommandations -->
+  <div class="mt-8 stat-card bg-yellow-50 border-l-4" style="border-color: var(--orange);">
+    <h3 class="display font-bold text-lg mb-3" style="color: var(--orange);">📍 Recommandation Mozes'IA</h3>
+    <p style="color: #444;" class="mb-3">D'après la cartographie : <strong>l'ouverture d'une maison de santé pluridisciplinaire à Villeneuve-la-Garenne</strong> permettrait de desservir 30 800 habitants actuellement à 25-30 minutes du généraliste le plus proche.</p>
+    <p class="text-sm" style="color: #666;"><strong>Impact estimé :</strong> Réduction du temps d'accès de 30 min à 15 min · Couverture +12 000 habitants supplémentaires · Coût estimé 1,2 M€</p>
+  </div>
+</div>
+
+<!-- ===== PRÉVISION RETRAITES ===== -->
+<div id="tab-prevision" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Prévision des départs à la retraite</h1>
+    <p style="color: #666;">Anticiper le renouvellement de la démographie médicale</p>
+  </div>
+  
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="stat-card">
+      <h3 class="display font-bold text-lg mb-4" style="color: var(--bleu);">Médecins partant à la retraite (5 prochaines années)</h3>
+      <canvas id="chart-retraites" style="max-height: 300px;"></canvas>
+    </div>
+    <div class="stat-card">
+      <h3 class="display font-bold text-lg mb-2" style="color: var(--bleu);">Solde démographique projeté</h3>
+      <p class="text-sm mb-4" style="color: #666;">Différence entre départs et nouvelles installations</p>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">2026</span>
+          <span class="font-bold" style="color: var(--rouge);">−4</span>
+        </div>
+        <div class="severity-bar"><div class="severity-fill" style="width: 30%; background: var(--rouge);"></div></div>
+        
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">2027</span>
+          <span class="font-bold" style="color: var(--rouge);">−7</span>
+        </div>
+        <div class="severity-bar"><div class="severity-fill" style="width: 50%; background: var(--rouge);"></div></div>
+        
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">2028</span>
+          <span class="font-bold" style="color: var(--orange);">−5</span>
+        </div>
+        <div class="severity-bar"><div class="severity-fill" style="width: 40%; background: var(--orange);"></div></div>
+        
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">2029</span>
+          <span class="font-bold" style="color: var(--orange);">−3</span>
+        </div>
+        <div class="severity-bar"><div class="severity-fill" style="width: 25%; background: var(--orange);"></div></div>
+        
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">2030</span>
+          <span class="font-bold" style="color: var(--vert);">+1</span>
+        </div>
+        <div class="severity-bar"><div class="severity-fill" style="width: 10%; background: var(--vert);"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RAPPORTS ===== -->
+<div id="tab-rapports" class="tab-content slide-up">
+  <div class="mb-6 mt-12 lg:mt-0">
+    <h1 class="display text-3xl md:text-4xl font-extrabold mb-1" style="color: var(--bleu);">Rapports et exports</h1>
+    <p style="color: #666;">Génération automatique de rapports pour ARS, DREES, mairie</p>
+  </div>
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="stat-card cursor-pointer hover:shadow-lg">
+      <div class="text-3xl mb-3">📊</div>
+      <h3 class="display font-bold text-lg mb-1" style="color: var(--bleu);">Rapport ARS mensuel</h3>
+      <p class="text-sm mb-3" style="color: #666;">Synthèse complète pour l'Agence Régionale de Santé</p>
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold text-white w-full" style="background: var(--teal);">Générer (PDF)</button>
+    </div>
+    <div class="stat-card cursor-pointer hover:shadow-lg">
+      <div class="text-3xl mb-3">📋</div>
+      <h3 class="display font-bold text-lg mb-1" style="color: var(--bleu);">Délibération municipale</h3>
+      <p class="text-sm mb-3" style="color: #666;">Document type pour conseil municipal</p>
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold text-white w-full" style="background: var(--teal);">Générer (Word)</button>
+    </div>
+    <div class="stat-card cursor-pointer hover:shadow-lg">
+      <div class="text-3xl mb-3">📈</div>
+      <h3 class="display font-bold text-lg mb-1" style="color: var(--bleu);">Données brutes</h3>
+      <p class="text-sm mb-3" style="color: #666;">Export complet des indicateurs</p>
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold text-white w-full" style="background: var(--teal);">Exporter (Excel)</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const TERRITOIRE = {"communes":[{"code":"92002","nom":"Antony","pop":62800,"lat":48.7541,"lon":2.2956,"medecins":212,"generalistes":8,"pharmaciens":49,"infirmiers":390,"kines":11,"dentistes":19,"sages_femmes":40,"total_pros":992,"densite_gen":0.13,"indice_acces_soins":5,"pathologies":{"diabete_type2":2968,"hypertension":7740,"asthme":4266,"depression":4771,"maladies_cardiovasculaires":2798,"cancers":1541},"age_moyen_medecins":59,"medecins_retraite_5ans":27},{"code":"92004","nom":"Asnières-sur-Seine","pop":87100,"lat":48.9159,"lon":2.2851,"medecins":54,"generalistes":21,"pharmaciens":30,"infirmiers":54,"kines":18,"dentistes":61,"sages_femmes":1,"total_pros":409,"densite_gen":0.24,"indice_acces_soins":9,"pathologies":{"diabete_type2":6255,"hypertension":16519,"asthme":6588,"depression":5938,"maladies_cardiovasculaires":5031,"cancers":2606},"age_moyen_medecins":48,"medecins_retraite_5ans":5},{"code":"92007","nom":"Bagneux","pop":41200,"lat":48.7973,"lon":2.3094,"medecins":43,"generalistes":27,"pharmaciens":17,"infirmiers":33,"kines":0,"dentistes":29,"sages_femmes":0,"total_pros":186,"densite_gen":0.66,"indice_acces_soins":26,"pathologies":{"diabete_type2":1839,"hypertension":5839,"asthme":2536,"depression":4541,"maladies_cardiovasculaires":2468,"cancers":851},"age_moyen_medecins":56,"medecins_retraite_5ans":7},{"code":"92009","nom":"Bois-Colombes","pop":28800,"lat":48.9143,"lon":2.2702,"medecins":27,"generalistes":3,"pharmaciens":8,"infirmiers":27,"kines":0,"dentistes":14,"sages_femmes":0,"total_pros":106,"densite_gen":0.1,"indice_acces_soins":4,"pathologies":{"diabete_type2":2268,"hypertension":5174,"asthme":1891,"depression":2647,"maladies_cardiovasculaires":1433,"cancers":582},"age_moyen_medecins":60,"medecins_retraite_5ans":8},{"code":"92012","nom":"Boulogne-Billancourt","pop":121300,"lat":48.8356,"lon":2.24,"medecins":550,"generalistes":43,"pharmaciens":106,"infirmiers":668,"kines":24,"dentistes":58,"sages_femmes":0,"total_pros":1890,"densite_gen":0.35,"indice_acces_soins":13,"pathologies":{"diabete_type2":6159,"hypertension":21480,"asthme":8852,"depression":9554,"maladies_cardiovasculaires":4912,"cancers":3307},"age_moyen_medecins":60,"medecins_retraite_5ans":98},{"code":"92014","nom":"Bourg-la-Reine","pop":21100,"lat":48.7795,"lon":2.3147,"medecins":34,"generalistes":5,"pharmaciens":11,"infirmiers":30,"kines":1,"dentistes":9,"sages_femmes":0,"total_pros":138,"densite_gen":0.24,"indice_acces_soins":9,"pathologies":{"diabete_type2":948,"hypertension":2721,"asthme":1444,"depression":1464,"maladies_cardiovasculaires":1000,"cancers":598},"age_moyen_medecins":57,"medecins_retraite_5ans":7},{"code":"92019","nom":"Châtenay-Malabry","pop":33400,"lat":48.7648,"lon":2.268,"medecins":20,"generalistes":11,"pharmaciens":23,"infirmiers":45,"kines":13,"dentistes":18,"sages_femmes":0,"total_pros":177,"densite_gen":0.33,"indice_acces_soins":13,"pathologies":{"diabete_type2":1424,"hypertension":5889,"asthme":2768,"depression":2259,"maladies_cardiovasculaires":1777,"cancers":748},"age_moyen_medecins":56,"medecins_retraite_5ans":4},{"code":"92020","nom":"Châtillon","pop":38700,"lat":48.8004,"lon":2.2941,"medecins":58,"generalistes":21,"pharmaciens":26,"infirmiers":70,"kines":24,"dentistes":17,"sages_femmes":1,"total_pros":360,"densite_gen":0.54,"indice_acces_soins":21,"pathologies":{"diabete_type2":2835,"hypertension":7177,"asthme":2675,"depression":3109,"maladies_cardiovasculaires":2603,"cancers":845},"age_moyen_medecins":48,"medecins_retraite_5ans":15},{"code":"92022","nom":"Chaville","pop":21000,"lat":48.8063,"lon":2.1908,"medecins":11,"generalistes":5,"pharmaciens":8,"infirmiers":7,"kines":0,"dentistes":8,"sages_femmes":0,"total_pros":61,"densite_gen":0.24,"indice_acces_soins":9,"pathologies":{"diabete_type2":1073,"hypertension":4103,"asthme":1346,"depression":1423,"maladies_cardiovasculaires":868,"cancers":471},"age_moyen_medecins":54,"medecins_retraite_5ans":2},{"code":"92023","nom":"Clamart","pop":53800,"lat":48.8013,"lon":2.2634,"medecins":334,"generalistes":60,"pharmaciens":59,"infirmiers":760,"kines":15,"dentistes":41,"sages_femmes":93,"total_pros":1712,"densite_gen":1.12,"indice_acces_soins":44,"pathologies":{"diabete_type2":4009,"hypertension":9444,"asthme":3356,"depression":4744,"maladies_cardiovasculaires":3069,"cancers":1505},"age_moyen_medecins":58,"medecins_retraite_5ans":67},{"code":"92024","nom":"Clichy","pop":64900,"lat":48.9046,"lon":2.3045,"medecins":387,"generalistes":70,"pharmaciens":60,"infirmiers":687,"kines":22,"dentistes":49,"sages_femmes":41,"total_pros":1665,"densite_gen":1.08,"indice_acces_soins":43,"pathologies":{"diabete_type2":2888,"hypertension":12778,"asthme":3945,"depression":6081,"maladies_cardiovasculaires":2949,"cancers":1632},"age_moyen_medecins":55,"medecins_retraite_5ans":86},{"code":"92025","nom":"Colombes","pop":86300,"lat":48.9234,"lon":2.2547,"medecins":284,"generalistes":54,"pharmaciens":73,"infirmiers":574,"kines":8,"dentistes":109,"sages_femmes":61,"total_pros":1492,"densite_gen":0.63,"indice_acces_soins":25,"pathologies":{"diabete_type2":4557,"hypertension":15598,"asthme":7133,"depression":9740,"maladies_cardiovasculaires":3488,"cancers":3128},"age_moyen_medecins":53,"medecins_retraite_5ans":81},{"code":"92026","nom":"Courbevoie","pop":84500,"lat":48.8975,"lon":2.258,"medecins":112,"generalistes":41,"pharmaciens":13,"infirmiers":107,"kines":16,"dentistes":41,"sages_femmes":5,"total_pros":433,"densite_gen":0.49,"indice_acces_soins":19,"pathologies":{"diabete_type2":6527,"hypertension":16496,"asthme":4454,"depression":6946,"maladies_cardiovasculaires":5901,"cancers":1755},"age_moyen_medecins":60,"medecins_retraite_5ans":21},{"code":"92032","nom":"Fontenay-aux-Roses","pop":25800,"lat":48.7904,"lon":2.2888,"medecins":26,"generalistes":16,"pharmaciens":18,"infirmiers":26,"kines":5,"dentistes":11,"sages_femmes":0,"total_pros":127,"densite_gen":0.62,"indice_acces_soins":24,"pathologies":{"diabete_type2":1853,"hypertension":4192,"asthme":1425,"depression":1980,"maladies_cardiovasculaires":1418,"cancers":733},"age_moyen_medecins":58,"medecins_retraite_5ans":5},{"code":"92033","nom":"Garches","pop":18600,"lat":48.8443,"lon":2.1854,"medecins":282,"generalistes":84,"pharmaciens":30,"infirmiers":356,"kines":65,"dentistes":8,"sages_femmes":1,"total_pros":1075,"densite_gen":4.52,"indice_acces_soins":100,"pathologies":{"diabete_type2":1149,"hypertension":3548,"asthme":1399,"depression":1408,"maladies_cardiovasculaires":829,"cancers":443},"age_moyen_medecins":51,"medecins_retraite_5ans":75},{"code":"92035","nom":"La Garenne-Colombes","pop":30800,"lat":48.9041,"lon":2.2459,"medecins":94,"generalistes":12,"pharmaciens":21,"infirmiers":87,"kines":7,"dentistes":28,"sages_femmes":3,"total_pros":323,"densite_gen":0.39,"indice_acces_soins":15,"pathologies":{"diabete_type2":2381,"hypertension":5903,"asthme":2078,"depression":3377,"maladies_cardiovasculaires":2121,"cancers":1054},"age_moyen_medecins":57,"medecins_retraite_5ans":21},{"code":"92036","nom":"Gennevilliers","pop":49100,"lat":48.9342,"lon":2.2987,"medecins":76,"generalistes":40,"pharmaciens":20,"infirmiers":78,"kines":14,"dentistes":51,"sages_femmes":6,"total_pros":363,"densite_gen":0.81,"indice_acces_soins":32,"pathologies":{"diabete_type2":2705,"hypertension":6790,"asthme":2738,"depression":5033,"maladies_cardiovasculaires":2483,"cancers":1075},"age_moyen_medecins":60,"medecins_retraite_5ans":8},{"code":"92040","nom":"Issy-les-Moulineaux","pop":73000,"lat":48.8245,"lon":2.2735,"medecins":192,"generalistes":68,"pharmaciens":47,"infirmiers":255,"kines":22,"dentistes":29,"sages_femmes":2,"total_pros":702,"densite_gen":0.93,"indice_acces_soins":37,"pathologies":{"diabete_type2":3369,"hypertension":10012,"asthme":6220,"depression":5690,"maladies_cardiovasculaires":4977,"cancers":2324},"age_moyen_medecins":57,"medecins_retraite_5ans":23},{"code":"92044","nom":"Levallois-Perret","pop":67400,"lat":48.8945,"lon":2.2876,"medecins":264,"generalistes":59,"pharmaciens":29,"infirmiers":541,"kines":11,"dentistes":30,"sages_femmes":54,"total_pros":1135,"densite_gen":0.88,"indice_acces_soins":35,"pathologies":{"diabete_type2":4272,"hypertension":11214,"asthme":5810,"depression":5961,"maladies_cardiovasculaires":4189,"cancers":1862},"age_moyen_medecins":56,"medecins_retraite_5ans":26},{"code":"92046","nom":"Malakoff","pop":35100,"lat":48.8175,"lon":2.2999,"medecins":95,"generalistes":44,"pharmaciens":18,"infirmiers":26,"kines":8,"dentistes":25,"sages_femmes":3,"total_pros":222,"densite_gen":1.25,"indice_acces_soins":50,"pathologies":{"diabete_type2":2797,"hypertension":4681,"asthme":3151,"depression":3198,"maladies_cardiovasculaires":2365,"cancers":1050},"age_moyen_medecins":49,"medecins_retraite_5ans":18},{"code":"92047","nom":"Marnes-la-Coquette","pop":1800,"lat":48.829,"lon":2.173,"medecins":1,"generalistes":1,"pharmaciens":0,"infirmiers":2,"kines":0,"dentistes":0,"sages_femmes":0,"total_pros":6,"densite_gen":0.56,"indice_acces_soins":22,"pathologies":{"diabete_type2":127,"hypertension":256,"asthme":148,"depression":108,"maladies_cardiovasculaires":87,"cancers":68},"age_moyen_medecins":60,"medecins_retraite_5ans":0},{"code":"92048","nom":"Meudon","pop":46100,"lat":48.8136,"lon":2.2364,"medecins":42,"generalistes":4,"pharmaciens":23,"infirmiers":90,"kines":0,"dentistes":23,"sages_femmes":0,"total_pros":252,"densite_gen":0.09,"indice_acces_soins":3,"pathologies":{"diabete_type2":2883,"hypertension":5967,"asthme":4087,"depression":5327,"maladies_cardiovasculaires":1994,"cancers":1783},"age_moyen_medecins":58,"medecins_retraite_5ans":12},{"code":"92049","nom":"Montrouge","pop":51800,"lat":48.8186,"lon":2.3122,"medecins":80,"generalistes":25,"pharmaciens":14,"infirmiers":53,"kines":4,"dentistes":39,"sages_femmes":2,"total_pros":246,"densite_gen":0.48,"indice_acces_soins":19,"pathologies":{"diabete_type2":2886,"hypertension":7468,"asthme":4121,"depression":3769,"maladies_cardiovasculaires":1556,"cancers":1699},"age_moyen_medecins":55,"medecins_retraite_5ans":8},{"code":"92050","nom":"Nanterre","pop":95900,"lat":48.8924,"lon":2.2068,"medecins":243,"generalistes":110,"pharmaciens":64,"infirmiers":481,"kines":9,"dentistes":78,"sages_femmes":67,"total_pros":1338,"densite_gen":1.15,"indice_acces_soins":45,"pathologies":{"diabete_type2":4294,"hypertension":19119,"asthme":6281,"depression":8273,"maladies_cardiovasculaires":3857,"cancers":2036},"age_moyen_medecins":51,"medecins_retraite_5ans":60},{"code":"92051","nom":"Neuilly-sur-Seine","pop":60900,"lat":48.8846,"lon":2.2691,"medecins":615,"generalistes":52,"pharmaciens":125,"infirmiers":527,"kines":19,"dentistes":17,"sages_femmes":61,"total_pros":1850,"densite_gen":0.85,"indice_acces_soins":34,"pathologies":{"diabete_type2":2758,"hypertension":8009,"asthme":5035,"depression":6996,"maladies_cardiovasculaires":2110,"cancers":2308},"age_moyen_medecins":60,"medecins_retraite_5ans":77},{"code":"92060","nom":"Le Plessis-Robinson","pop":30700,"lat":48.7805,"lon":2.2645,"medecins":167,"generalistes":14,"pharmaciens":30,"infirmiers":335,"kines":8,"dentistes":9,"sages_femmes":0,"total_pros":641,"densite_gen":0.46,"indice_acces_soins":18,"pathologies":{"diabete_type2":1490,"hypertension":5630,"asthme":2660,"depression":2180,"maladies_cardiovasculaires":1463,"cancers":1154},"age_moyen_medecins":57,"medecins_retraite_5ans":43},{"code":"92062","nom":"Puteaux","pop":47600,"lat":48.8843,"lon":2.2392,"medecins":36,"generalistes":12,"pharmaciens":20,"infirmiers":32,"kines":5,"dentistes":21,"sages_femmes":1,"total_pros":166,"densite_gen":0.25,"indice_acces_soins":10,"pathologies":{"diabete_type2":2337,"hypertension":9516,"asthme":3484,"depression":5681,"maladies_cardiovasculaires":1839,"cancers":1682},"age_moyen_medecins":52,"medecins_retraite_5ans":9},{"code":"92063","nom":"Rueil-Malmaison","pop":79100,"lat":48.8773,"lon":2.1809,"medecins":187,"generalistes":42,"pharmaciens":49,"infirmiers":247,"kines":23,"dentistes":24,"sages_femmes":0,"total_pros":744,"densite_gen":0.53,"indice_acces_soins":21,"pathologies":{"diabete_type2":5915,"hypertension":14815,"asthme":5484,"depression":8334,"maladies_cardiovasculaires":4492,"cancers":2506},"age_moyen_medecins":49,"medecins_retraite_5ans":33},{"code":"92064","nom":"Saint-Cloud","pop":30800,"lat":48.8454,"lon":2.2118,"medecins":302,"generalistes":42,"pharmaciens":30,"infirmiers":372,"kines":6,"dentistes":3,"sages_femmes":53,"total_pros":1054,"densite_gen":1.36,"indice_acces_soins":54,"pathologies":{"diabete_type2":1692,"hypertension":3958,"asthme":2232,"depression":1891,"maladies_cardiovasculaires":2128,"cancers":1183},"age_moyen_medecins":51,"medecins_retraite_5ans":67},{"code":"92071","nom":"Sceaux","pop":19900,"lat":48.7768,"lon":2.2902,"medecins":21,"generalistes":5,"pharmaciens":15,"infirmiers":37,"kines":1,"dentistes":6,"sages_femmes":0,"total_pros":163,"densite_gen":0.25,"indice_acces_soins":10,"pathologies":{"diabete_type2":1021,"hypertension":2402,"asthme":1067,"depression":1314,"maladies_cardiovasculaires":831,"cancers":432},"age_moyen_medecins":48,"medecins_retraite_5ans":4},{"code":"92072","nom":"Sèvres","pop":23700,"lat":48.8235,"lon":2.2099,"medecins":31,"generalistes":7,"pharmaciens":9,"infirmiers":72,"kines":5,"dentistes":5,"sages_femmes":22,"total_pros":209,"densite_gen":0.3,"indice_acces_soins":11,"pathologies":{"diabete_type2":1020,"hypertension":3896,"asthme":1428,"depression":1992,"maladies_cardiovasculaires":1396,"cancers":722},"age_moyen_medecins":51,"medecins_retraite_5ans":7},{"code":"92073","nom":"Suresnes","pop":49600,"lat":48.8689,"lon":2.2245,"medecins":704,"generalistes":126,"pharmaciens":77,"infirmiers":813,"kines":26,"dentistes":31,"sages_femmes":80,"total_pros":2096,"densite_gen":2.54,"indice_acces_soins":100,"pathologies":{"diabete_type2":2254,"hypertension":8914,"asthme":4395,"depression":5314,"maladies_cardiovasculaires":2668,"cancers":1476},"age_moyen_medecins":51,"medecins_retraite_5ans":191},{"code":"92075","nom":"Vanves","pop":27300,"lat":48.8198,"lon":2.289,"medecins":16,"generalistes":4,"pharmaciens":22,"infirmiers":20,"kines":0,"dentistes":3,"sages_femmes":0,"total_pros":109,"densite_gen":0.15,"indice_acces_soins":5,"pathologies":{"diabete_type2":1925,"hypertension":4055,"asthme":1558,"depression":1836,"maladies_cardiovasculaires":1701,"cancers":908},"age_moyen_medecins":54,"medecins_retraite_5ans":4},{"code":"92076","nom":"Vaucresson","pop":8800,"lat":48.8418,"lon":2.1567,"medecins":8,"generalistes":5,"pharmaciens":0,"infirmiers":17,"kines":12,"dentistes":1,"sages_femmes":0,"total_pros":64,"densite_gen":0.57,"indice_acces_soins":22,"pathologies":{"diabete_type2":591,"hypertension":1111,"asthme":784,"depression":628,"maladies_cardiovasculaires":295,"cancers":279},"age_moyen_medecins":59,"medecins_retraite_5ans":1},{"code":"92077","nom":"Ville-d'Avray","pop":11400,"lat":48.8255,"lon":2.1984,"medecins":11,"generalistes":1,"pharmaciens":4,"infirmiers":12,"kines":0,"dentistes":0,"sages_femmes":0,"total_pros":76,"densite_gen":0.09,"indice_acces_soins":3,"pathologies":{"diabete_type2":865,"hypertension":2250,"asthme":625,"depression":938,"maladies_cardiovasculaires":440,"cancers":276},"age_moyen_medecins":56,"medecins_retraite_5ans":2},{"code":"92078","nom":"Villeneuve-la-Garenne","pop":30000,"lat":48.9395,"lon":2.3287,"medecins":21,"generalistes":7,"pharmaciens":49,"infirmiers":43,"kines":2,"dentistes":10,"sages_femmes":0,"total_pros":196,"densite_gen":0.23,"indice_acces_soins":9,"pathologies":{"diabete_type2":1487,"hypertension":5328,"asthme":1875,"depression":2370,"maladies_cardiovasculaires":1847,"cancers":855},"age_moyen_medecins":49,"medecins_retraite_5ans":5}],"hopitaux":[{"finess":"920000122","nom":"AGEPS APHP DE NANTERRE","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.8965472040821,"lon":2.172887524334989,"adresse":"92000 NANTERRE","tel":"0146691313","statut":"Etablissement public de santé","lits":613,"urgences":true,"taux_occupation":63},{"finess":"920000171","nom":"HDJ LA GARENNE COLOMBES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.90975874004779,"lon":2.2509964500902884,"adresse":"92250 LA GARENNE COLOMBES","tel":"0141197520","statut":"Etablissement public de santé","lits":717,"urgences":false,"taux_occupation":60},{"finess":"920000320","nom":"HDJ  BOULOGNE","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.84584893554706,"lon":2.2302131719334075,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0146035635","statut":"Etablissement public de santé","lits":145,"urgences":true,"taux_occupation":70},{"finess":"920000569","nom":"CH RIVES DE SEINE SITE COURBEVOIE","categorie":"Centre Hospitalier (C.H.)","lat":48.90100468903314,"lon":2.253580530683927,"adresse":"92400 COURBEVOIE","tel":"0140886340","statut":"Etablissement public de santé","lits":466,"urgences":true,"taux_occupation":90},{"finess":"920000577","nom":"CH DE NANTERRE","categorie":"Centre Hospitalier (C.H.)","lat":48.91262782447662,"lon":2.223217942920081,"adresse":"92014 NANTERRE CEDEX","tel":"0147696565","statut":"Etablissement public de santé","lits":268,"urgences":true,"taux_occupation":63},{"finess":"920000585","nom":"CH RIVES DE SEINE SITE NEUILLY S/SEINE","categorie":"Centre Hospitalier (C.H.)","lat":48.89070438671733,"lon":2.261803479401344,"adresse":"92205 NEUILLY SUR SEINE CEDEX","tel":"0140886000","statut":"Etablissement public de santé","lits":218,"urgences":true,"taux_occupation":60},{"finess":"920000593","nom":"CH RIVES DE SEINE SITE DE PUTEAUX","categorie":"Centre Hospitalier (C.H.)","lat":48.878484251017134,"lon":2.2419534117117803,"adresse":"92800 PUTEAUX","tel":"0140886340","statut":"Etablissement public de santé","lits":449,"urgences":true,"taux_occupation":89},{"finess":"920000601","nom":"CH DEPARTEMENTAL DE STELL","categorie":"Centre Hospitalier (C.H.)","lat":48.87682004135085,"lon":2.1870647620130126,"adresse":"92501 RUEIL MALMAISON CEDEX","tel":"0141299000","statut":"Etablissement public de santé","lits":342,"urgences":true,"taux_occupation":95},{"finess":"920000619","nom":"CH DES QUATRE VILLES SITE ST CLOUD","categorie":"Centre Hospitalier (C.H.)","lat":48.84385058353938,"lon":2.2181562694461863,"adresse":"92210 ST CLOUD","tel":"0177707070","statut":"Etablissement public de santé","lits":727,"urgences":false,"taux_occupation":91},{"finess":"920000627","nom":"CH DES QUATRE VILLES SITE SEVRES","categorie":"Centre Hospitalier (C.H.)","lat":48.82102931263535,"lon":2.202451115893685,"adresse":"92310 SEVRES","tel":"0177707070","statut":"Etablissement public de santé","lits":208,"urgences":true,"taux_occupation":78},{"finess":"920001369","nom":"SSR FONDATION ROGUET","categorie":"Centre Hospitalier (C.H.)","lat":48.90612469636748,"lon":2.3151733998256687,"adresse":"92110 CLICHY","tel":"0141404600","statut":"Etablissement public de santé","lits":272,"urgences":true,"taux_occupation":94},{"finess":"920002177","nom":"CHS PUBLIC DE SANTE ERASME","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.7451023998658,"lon":2.3156246486626646,"adresse":"92161 ANTONY CEDEX","tel":"0146743399","statut":"Etablissement public de santé","lits":112,"urgences":false,"taux_occupation":80},{"finess":"920003092","nom":"HAD DU CHS DE MOISSELLES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.89948768775446,"lon":2.3153220924331483,"adresse":"92110 CLICHY","tel":"0141066370","statut":"Etablissement public de santé","lits":108,"urgences":true,"taux_occupation":90},{"finess":"920006038","nom":"MAISON THERAPEUTIQUE PYRENEES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.73535829143567,"lon":2.2782932312745428,"adresse":"92160 ANTONY","tel":"0149841931","statut":"Etablissement public de santé","lits":564,"urgences":false,"taux_occupation":70},{"finess":"920006418","nom":"CDS MEDICO SPORTIF JOLIOT CURIE","categorie":"Centre de Santé","lat":48.89129707642674,"lon":2.205459565607452,"adresse":"92000 NANTERRE","tel":"0141374452","statut":"","lits":108,"urgences":false,"taux_occupation":65},{"finess":"920007168","nom":"CDS MUNICIPAL AUVERGNE CLAMART","categorie":"Centre de Santé","lat":48.782556831587065,"lon":2.2400969449613948,"adresse":"92140 CLAMART","tel":"0171167586","statut":"","lits":240,"urgences":true,"taux_occupation":64},{"finess":"920007408","nom":"CHS ROGER PREVOT DE NANTERRE","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.91262782447662,"lon":2.223217942920081,"adresse":"92014 NANTERRE CEDEX","tel":"0156470340","statut":"Etablissement public de santé","lits":741,"urgences":true,"taux_occupation":85},{"finess":"920007549","nom":"MAISON DE SANTE DE ROCHEBRUNE","categorie":"Maison de Santé pour Maladies Mentales","lat":48.85370575798243,"lon":2.2001737723385304,"adresse":"92380 GARCHES","tel":"0180044600","statut":"Non concerné","lits":172,"urgences":false,"taux_occupation":75},{"finess":"920010063","nom":"CDS MUNICIPAL BAGNEUX","categorie":"Centre de Santé","lat":48.79706344483906,"lon":2.317439745041742,"adresse":"92220 BAGNEUX","tel":"0145361360","statut":"","lits":642,"urgences":false,"taux_occupation":62},{"finess":"920010089","nom":"HDJ LE PETIT HANS","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.87179659658515,"lon":2.196573486859504,"adresse":"92500 RUEIL MALMAISON","tel":"0147140767","statut":"Etablissement public de santé","lits":684,"urgences":true,"taux_occupation":86},{"finess":"920010204","nom":"CDS DE L ONERA","categorie":"Centre de Santé","lat":48.79789244043434,"lon":2.2826872028397163,"adresse":"92320 CHATILLON","tel":"0142534502","statut":"","lits":723,"urgences":false,"taux_occupation":93},{"finess":"920010212","nom":"CDS MUNICIPAL DE CHATILLON","categorie":"Centre de Santé","lat":48.80510167186223,"lon":2.2963946265299007,"adresse":"92320 CHATILLON","tel":"0158072470","statut":"","lits":373,"urgences":true,"taux_occupation":73},{"finess":"920010220","nom":"CDS MUNICIPAL JEAN JAURES CLAMART","categorie":"Centre de Santé","lat":48.80393038054578,"lon":2.2658405571166167,"adresse":"92140 CLAMART","tel":"0171167640","statut":"","lits":735,"urgences":false,"taux_occupation":80},{"finess":"920010246","nom":"CDS MUNICIPAL CHAGALL GOUIN","categorie":"Centre de Santé","lat":48.90188656505081,"lon":2.3108435009970534,"adresse":"92110 CLICHY","tel":"0141409373","statut":"","lits":294,"urgences":true,"taux_occupation":85},{"finess":"920010295","nom":"CSS JEUNES DE COLOMBES","categorie":"Centre de santé sexuelle","lat":48.92264094445214,"lon":2.2535185354167977,"adresse":"92700 COLOMBES","tel":"0147604316","statut":"","lits":184,"urgences":false,"taux_occupation":79},{"finess":"920010329","nom":"CDS MUNICIPAL GENNEVILLIERS","categorie":"Centre de Santé","lat":48.93457332852799,"lon":2.297017294936785,"adresse":"92231 GENNEVILLIERS CEDEX","tel":"0140856650","statut":"","lits":518,"urgences":true,"taux_occupation":64},{"finess":"920010352","nom":"CDS MUNICIPAL ISSY LES MOULINEAUX","categorie":"Centre de Santé","lat":48.82284008443709,"lon":2.26920691055952,"adresse":"92130 ISSY LES MOULINEAUX","tel":"0141238300","statut":"","lits":59,"urgences":true,"taux_occupation":66},{"finess":"920010451","nom":"CDS DE MALAKOFF","categorie":"Centre de Santé","lat":48.821549765461945,"lon":2.309201773660213,"adresse":"92240 MALAKOFF","tel":"0144123785","statut":"","lits":125,"urgences":false,"taux_occupation":73},{"finess":"920010469","nom":"CDS MEDICO-SOCIAL MUNICIPAL TENINE","categorie":"Centre de Santé","lat":48.82065508870885,"lon":2.3050472742751387,"adresse":"92240 MALAKOFF","tel":"0141174350","statut":"","lits":568,"urgences":true,"taux_occupation":68},{"finess":"920010477","nom":"CDS MUNICIPAL JACQUELINE AKOUN CORNET","categorie":"Centre de Santé","lat":48.81376027183896,"lon":2.2865516785200826,"adresse":"92240 MALAKOFF","tel":"0146440738","statut":"","lits":407,"urgences":true,"taux_occupation":75},{"finess":"920010493","nom":"CDS MUNICIPAL MONTROUGE","categorie":"Centre de Santé","lat":48.81717137162055,"lon":2.3239601893826087,"adresse":"92120 MONTROUGE","tel":"0146127409","statut":"","lits":428,"urgences":true,"taux_occupation":70},{"finess":"920010501","nom":"CDS MUNICIPAL JULIETTE TENINE","categorie":"Centre de Santé","lat":48.89164585296042,"lon":2.193996348421135,"adresse":"92000 NANTERRE","tel":"0189354200","statut":"","lits":498,"urgences":false,"taux_occupation":79},{"finess":"920010550","nom":"CDS MEDICAL SAN FERNANDO","categorie":"Centre de Santé","lat":48.88876238662512,"lon":2.273807778282401,"adresse":"92200 NEUILLY SUR SEINE","tel":"0147474541","statut":"","lits":676,"urgences":false,"taux_occupation":93},{"finess":"920010576","nom":"CDS MINICIPAL J SALOMON","categorie":"Centre de Santé","lat":48.77986557916065,"lon":2.261438968947449,"adresse":"92350 LE PLESSIS ROBINSON","tel":"0146014480","statut":"","lits":58,"urgences":false,"taux_occupation":95},{"finess":"920010626","nom":"CDS MUNICIPAL RAYMOND BURGOS","categorie":"Centre de Santé","lat":48.87164819024628,"lon":2.2253587613299133,"adresse":"92150 SURESNES","tel":"0141181550","statut":"","lits":356,"urgences":false,"taux_occupation":66},{"finess":"920010709","nom":"CDS MUNICIPAL PUTEAUX","categorie":"Centre de Santé","lat":48.88512006941658,"lon":2.2393339766531506,"adresse":"92800 PUTEAUX","tel":"0147752020","statut":"","lits":187,"urgences":true,"taux_occupation":67},{"finess":"920010725","nom":"CDS MUNICIPAL FONTENAY AUX ROSES","categorie":"Centre de Santé","lat":48.78914286084363,"lon":2.288079343399373,"adresse":"92260 FONTENAY AUX ROSES","tel":"0146611286","statut":"","lits":159,"urgences":false,"taux_occupation":95},{"finess":"920010857","nom":"CDS MUNICIPAL DU PARC","categorie":"Centre de Santé","lat":48.88946483353156,"lon":2.2204662862981044,"adresse":"92000 NANTERRE","tel":"0147295071","statut":"","lits":209,"urgences":true,"taux_occupation":78},{"finess":"920010949","nom":"HDJ LE SUD EST","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.88903740782091,"lon":2.197826740398562,"adresse":"92000 NANTERRE","tel":"0141373994","statut":"Etablissement public de santé","lits":669,"urgences":true,"taux_occupation":81},{"finess":"920011988","nom":"HDJ LE CHEMIN","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.90118201440463,"lon":2.316268321347902,"adresse":"92110 CLICHY","tel":"","statut":"Etablissement public de santé","lits":258,"urgences":false,"taux_occupation":76},{"finess":"920012069","nom":"RELAIS JEUNES DE SEVRES","categorie":"Maison de Santé pour Maladies Mentales","lat":48.821534020801664,"lon":2.215114427396156,"adresse":"92310 SEVRES","tel":"0141141500","statut":"Non concerné","lits":567,"urgences":true,"taux_occupation":76},{"finess":"920014628","nom":"CMP COURSIVE DES LOUPIOTS","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.89233488488636,"lon":2.225636090613659,"adresse":"92000 NANTERRE","tel":"0149000788","statut":"Etablissement public de santé","lits":102,"urgences":true,"taux_occupation":87},{"finess":"920015328","nom":"CSS DE BOURG LA REINE","categorie":"Centre de santé sexuelle","lat":48.77893053602762,"lon":2.3158818831284584,"adresse":"92340 BOURG LA REINE","tel":"0141136830","statut":"","lits":333,"urgences":true,"taux_occupation":60},{"finess":"920018058","nom":"CDS MEDICO-DENTAIRE CARNOT","categorie":"Centre de Santé","lat":48.89211564268972,"lon":2.286465473236659,"adresse":"92300 LEVALLOIS PERRET","tel":"0147578170","statut":"","lits":391,"urgences":true,"taux_occupation":76},{"finess":"920021771","nom":"HAD MONTROUGE","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.81701908628781,"lon":2.3239090495823134,"adresse":"92120 MONTROUGE","tel":"0147460081","statut":"Etablissement public de santé","lits":215,"urgences":false,"taux_occupation":88},{"finess":"920024114","nom":"CSS DE CHATENAY MALABRY","categorie":"Centre de santé sexuelle","lat":48.76292423938419,"lon":2.256412169717352,"adresse":"92290 CHATENAY MALABRY","tel":"0146326520","statut":"","lits":614,"urgences":false,"taux_occupation":87},{"finess":"920024205","nom":"SSR LES ABONDANCES","categorie":"Centre Hospitalier (C.H.)","lat":48.84667329005306,"lon":2.232675640679545,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0141225656","statut":"Etablissement public de santé","lits":624,"urgences":true,"taux_occupation":67},{"finess":"920024213","nom":"CSS FONTENAY AUX ROSES","categorie":"Centre de santé sexuelle","lat":48.78914286084363,"lon":2.288079343399373,"adresse":"92260 FONTENAY AUX ROSES","tel":"0146604310","statut":"","lits":127,"urgences":false,"taux_occupation":69},{"finess":"920024262","nom":"CSS DE BAGNEUX","categorie":"Centre de santé sexuelle","lat":48.79657341344792,"lon":2.3173072972558004,"adresse":"92220 BAGNEUX","tel":"0145361350","statut":"","lits":608,"urgences":true,"taux_occupation":83},{"finess":"920024270","nom":"CSS DE CHATILLON","categorie":"Centre de santé sexuelle","lat":48.80280617454334,"lon":2.2854393683540537,"adresse":"92320 CHATILLON","tel":"0146573338","statut":"","lits":646,"urgences":false,"taux_occupation":69},{"finess":"920024312","nom":"CSS ISSY LES MOULINEAUX","categorie":"Centre de santé sexuelle","lat":48.82287503220003,"lon":2.269333092496281,"adresse":"92130 ISSY LES MOULINEAUX","tel":"0146451064","statut":"","lits":490,"urgences":true,"taux_occupation":62},{"finess":"920024320","nom":"CSS DE MALAKOFF","categorie":"Centre de santé sexuelle","lat":48.82065508870885,"lon":2.3050472742751387,"adresse":"92240 MALAKOFF","tel":"0141174350","statut":"","lits":365,"urgences":true,"taux_occupation":62},{"finess":"920024346","nom":"CSS JULES GUESDE","categorie":"Centre de santé sexuelle","lat":48.81376027183896,"lon":2.2865516785200826,"adresse":"92240 MALAKOFF","tel":"0146440738","statut":"","lits":416,"urgences":true,"taux_occupation":75},{"finess":"920024353","nom":"CSS DE MONTROUGE","categorie":"Centre de santé sexuelle","lat":48.81717137162055,"lon":2.3239601893826087,"adresse":"92120 MONTROUGE","tel":"0146127409","statut":"","lits":732,"urgences":true,"taux_occupation":82},{"finess":"920024387","nom":"CSS DE NANTERRE","categorie":"Centre de santé sexuelle","lat":48.88946483353156,"lon":2.2204662862981044,"adresse":"92000 NANTERRE","tel":"0147295071","statut":"","lits":623,"urgences":true,"taux_occupation":69},{"finess":"920024411","nom":"CSS RUEIL MALMAISON","categorie":"Centre de santé sexuelle","lat":48.88411437958548,"lon":2.174015031335203,"adresse":"92500 RUEIL MALMAISON","tel":"0147494197","statut":"","lits":292,"urgences":true,"taux_occupation":71},{"finess":"920024601","nom":"HDJ PSYCHOGERIATRIQUE FOUCAULT","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.90106070054492,"lon":2.312357673751094,"adresse":"92110 CLICHY","tel":"0155469576","statut":"Etablissement public de santé","lits":472,"urgences":true,"taux_occupation":71},{"finess":"920024734","nom":"ACCUEIL FAMILIAL THERAPEUTIQUE DANTON","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.91720040085501,"lon":2.297740480680332,"adresse":"92230 GENNEVILLIERS","tel":"0141322560","statut":"Etablissement public de santé","lits":390,"urgences":true,"taux_occupation":75},{"finess":"920024924","nom":"CDS MUNICIPAL DANIEL TIMSIT","categorie":"Centre de Santé","lat":48.92021290333041,"lon":2.303256496682914,"adresse":"92230 GENNEVILLIERS","tel":"0141112730","statut":"","lits":323,"urgences":true,"taux_occupation":66},{"finess":"920024965","nom":"CDS DENTAIRE MUNICIPAL NANTERRE","categorie":"Centre de Santé","lat":48.90808670995213,"lon":2.215147664515467,"adresse":"92000 NANTERRE","tel":"0142427970","statut":"","lits":441,"urgences":true,"taux_occupation":90},{"finess":"920025293","nom":"CDS UNIVERSITE PARIS OUEST","categorie":"Centre de Santé","lat":48.904381225573744,"lon":2.2101819003958285,"adresse":"92001 NANTERRE CEDEX","tel":"0140977857","statut":"","lits":277,"urgences":true,"taux_occupation":89},{"finess":"920026929","nom":"CSS D ASNIERES SUR SEINE","categorie":"Centre de santé sexuelle","lat":48.93136043122426,"lon":2.27576964224747,"adresse":"92600 ASNIERES SUR SEINE","tel":"","statut":"","lits":408,"urgences":true,"taux_occupation":74},{"finess":"920027711","nom":"CHS PAUL GUIRAUD SITE CLAMART","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.78707261395391,"lon":2.252326274585115,"adresse":"92140 CLAMART","tel":"0142117000","statut":"Etablissement public de santé","lits":278,"urgences":true,"taux_occupation":72},{"finess":"920027737","nom":"HDJ ST CLOUD","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.84630118094543,"lon":2.212914053858211,"adresse":"92210 ST CLOUD","tel":"0146023249","statut":"Etablissement public de santé","lits":458,"urgences":true,"taux_occupation":77},{"finess":"920027760","nom":"CDS DENTAIRE AADT","categorie":"Centre de Santé","lat":48.816078927331176,"lon":2.310158107636889,"adresse":"92120 MONTROUGE","tel":"0149656620","statut":"","lits":121,"urgences":true,"taux_occupation":82},{"finess":"920027810","nom":"CDS CREPS IDF","categorie":"Centre de Santé","lat":48.76522343185511,"lon":2.27222176119236,"adresse":"92291 CHATENAY MALABRY CEDEX","tel":"0141872030","statut":"","lits":706,"urgences":false,"taux_occupation":85},{"finess":"920027877","nom":"CDS ROND POINT DE L EUROPE","categorie":"Centre de Santé","lat":48.90555803071996,"lon":2.255470174859475,"adresse":"92250 LA GARENNE COLOMBES","tel":"0142420202","statut":"","lits":745,"urgences":false,"taux_occupation":81},{"finess":"920028115","nom":"MSPU VICTOR HUGO (LES AGNETTES)","categorie":"Maison de santé (L.6223-3)","lat":48.91988717117943,"lon":2.2920261326405487,"adresse":"92230 GENNEVILLIERS","tel":"0626696781","statut":"","lits":78,"urgences":true,"taux_occupation":76},{"finess":"920028198","nom":"CSS LEVALLOIS PERRET","categorie":"Centre de santé sexuelle","lat":48.89851369887668,"lon":2.292876056558133,"adresse":"92300 LEVALLOIS PERRET","tel":"","statut":"","lits":232,"urgences":false,"taux_occupation":76},{"finess":"920028297","nom":"CDS MEDICO-DENTAIRE EMDHS","categorie":"Centre de Santé","lat":48.86852011344144,"lon":2.2247836314057343,"adresse":"92150 SURESNES","tel":"0141389630","statut":"","lits":89,"urgences":true,"taux_occupation":87},{"finess":"920028412","nom":"CDS MEDICO DENTAIRE CMDNOP","categorie":"Centre de Santé","lat":48.900810206881694,"lon":2.301396384464846,"adresse":"92110 CLICHY","tel":"0147312626","statut":"","lits":403,"urgences":false,"taux_occupation":80},{"finess":"920028552","nom":"CDS DENTAIRE DE LA BOULE","categorie":"Centre de Santé","lat":48.88627000289107,"lon":2.197941650564792,"adresse":"92000 NANTERRE","tel":"0146951515","statut":"","lits":496,"urgences":false,"taux_occupation":92},{"finess":"920028586","nom":"CDS MEDICO DENTAIRE OPHTALMO ASNIERES","categorie":"Centre de Santé","lat":48.91131520938699,"lon":2.2969548783195126,"adresse":"92600 ASNIERES SUR SEINE","tel":"0177379717","statut":"","lits":168,"urgences":true,"taux_occupation":72},{"finess":"920029121","nom":"CDS DENTAIRE DENTEGO","categorie":"Centre de Santé","lat":48.8340122986757,"lon":2.244184575201024,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0141101105","statut":"","lits":310,"urgences":true,"taux_occupation":87},{"finess":"920029147","nom":"CDS DENTAIRE COURBEVOIE","categorie":"Centre de Santé","lat":48.90204701408909,"lon":2.243405492828058,"adresse":"92400 COURBEVOIE","tel":"0147453955","statut":"","lits":51,"urgences":false,"taux_occupation":94},{"finess":"920029253","nom":"LBM CH QUATRE VILLES SITE DAILLY","categorie":"Centre Hospitalier (C.H.)","lat":48.84498507246968,"lon":2.217663685240167,"adresse":"92210 ST CLOUD","tel":"","statut":"Etablissement public de santé","lits":753,"urgences":false,"taux_occupation":72},{"finess":"920029360","nom":"CDS HOPITAL GOUIN ANNEXE","categorie":"Centre de Santé","lat":48.90188656505081,"lon":2.3108435009970534,"adresse":"92110 CLICHY","tel":"0141068100","statut":"","lits":422,"urgences":true,"taux_occupation":64},{"finess":"920029394","nom":"CDS MEDICAL ET DENTAIRE DE LA DEFENSE","categorie":"Centre de Santé","lat":48.89031465911813,"lon":2.245163474727658,"adresse":"92400 COURBEVOIE","tel":"0147785000","statut":"","lits":730,"urgences":true,"taux_occupation":80},{"finess":"920029535","nom":"CDS APAS BTP DE BOULOGNE","categorie":"Centre de Santé","lat":48.83772233104883,"lon":2.2303767906977754,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0153332222","statut":"","lits":729,"urgences":true,"taux_occupation":79},{"finess":"920029576","nom":"CDS MEDICO DENTAIRE DE MONTROUGE","categorie":"Centre de Santé","lat":48.81163433501996,"lon":2.3265975234474,"adresse":"92120 MONTROUGE","tel":"0158070505","statut":"","lits":569,"urgences":true,"taux_occupation":86},{"finess":"920029667","nom":"CDS MEDICO DENTAIRE NANTERRE CSMDN","categorie":"Centre de Santé","lat":48.88826985987426,"lon":2.194015875810072,"adresse":"92000 NANTERRE","tel":"0147255555","statut":"","lits":384,"urgences":true,"taux_occupation":78},{"finess":"920029758","nom":"HDJ GUY DE MAUPASSANT","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.9163062702052,"lon":2.237958458685947,"adresse":"92700 COLOMBES","tel":"","statut":"Etablissement public de santé","lits":617,"urgences":true,"taux_occupation":72},{"finess":"920029931","nom":"CDS MEDICO DENTAIRE BOULOGNE","categorie":"Centre de Santé","lat":48.834800805689305,"lon":2.246711251489867,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"","statut":"","lits":480,"urgences":false,"taux_occupation":84},{"finess":"920029998","nom":"CDS DENTAIRE GENNEVILLIERS","categorie":"Centre de Santé","lat":48.92268487059365,"lon":2.298134543414786,"adresse":"92230 GENNEVILLIERS","tel":"","statut":"","lits":743,"urgences":false,"taux_occupation":71},{"finess":"920030020","nom":"CDS VICTOR HUGO","categorie":"Centre de Santé","lat":48.90116975044208,"lon":2.3169559904765475,"adresse":"92110 CLICHY","tel":"","statut":"","lits":680,"urgences":false,"taux_occupation":79},{"finess":"920030244","nom":"CDS MEDICO-DENTAIRE DE NANTERRE","categorie":"Centre de Santé","lat":48.90111425624597,"lon":2.2179005413178863,"adresse":"92000 NANTERRE","tel":"","statut":"","lits":465,"urgences":false,"taux_occupation":60},{"finess":"920030251","nom":"CDS CENTRE DE SOINS DENTAIRES VAUBAN","categorie":"Centre de Santé","lat":48.80729306745168,"lon":2.2940325546713747,"adresse":"92320 CHATILLON","tel":"0141134141","statut":"","lits":361,"urgences":true,"taux_occupation":73},{"finess":"920030376","nom":"HDJ MGEN ACTION SANITAIRE ET SOCIALE","categorie":"Maison de Santé pour Maladies Mentales","lat":48.88796645192093,"lon":2.258106939344952,"adresse":"92200 NEUILLY SUR SEINE","tel":"","statut":"Etablissement de santé privé d","lits":490,"urgences":false,"taux_occupation":80},{"finess":"920030616","nom":"CDS MEDICO-DENTAIRE COLOMBES","categorie":"Centre de Santé","lat":48.91458328533439,"lon":2.227303995511303,"adresse":"92700 COLOMBES","tel":"","statut":"","lits":526,"urgences":true,"taux_occupation":88},{"finess":"920030665","nom":"CDS CENTRE DENTAIRE DE FRANCE","categorie":"Centre de Santé","lat":48.78716283627028,"lon":2.226233389462981,"adresse":"92360 MEUDON","tel":"","statut":"","lits":741,"urgences":true,"taux_occupation":92},{"finess":"920030830","nom":"CDS DES CHAMPS PHILIPPE","categorie":"Centre de Santé","lat":48.90442435659316,"lon":2.232447780491626,"adresse":"92250 LA GARENNE COLOMBES","tel":"0147858282","statut":"","lits":534,"urgences":false,"taux_occupation":70},{"finess":"920030954","nom":"CDS MEDICO DENTAIRE GENNEVILLIERS","categorie":"Centre de Santé","lat":48.93321225834411,"lon":2.2899256783344506,"adresse":"92230 GENNEVILLIERS","tel":"","statut":"","lits":724,"urgences":true,"taux_occupation":78},{"finess":"920031150","nom":"CDS DENTAIRE COURBEVOIE","categorie":"Centre de Santé","lat":48.89330339594891,"lon":2.2585914564169216,"adresse":"92400 COURBEVOIE","tel":"","statut":"","lits":577,"urgences":false,"taux_occupation":81},{"finess":"920031283","nom":"CDS MEDICO-DENTAIRE GENNEVILLIERS","categorie":"Centre de Santé","lat":48.92301129592228,"lon":2.299052663085837,"adresse":"92230 GENNEVILLIERS","tel":"","statut":"","lits":145,"urgences":true,"taux_occupation":79},{"finess":"920031309","nom":"CDS DENTAIRE ALAVIA","categorie":"Centre de Santé","lat":48.89388559366586,"lon":2.2916281911911414,"adresse":"92300 LEVALLOIS PERRET","tel":"","statut":"","lits":280,"urgences":true,"taux_occupation":69},{"finess":"920031812","nom":"MSP DES CHENES","categorie":"Maison de santé (L.6223-3)","lat":48.88039841650292,"lon":2.2239032116242425,"adresse":"92150 SURESNES","tel":"0141443310","statut":"","lits":75,"urgences":true,"taux_occupation":75},{"finess":"920031838","nom":"MSP MEUDON LA FORET","categorie":"Maison de santé (L.6223-3)","lat":48.787183027202296,"lon":2.2279644567027512,"adresse":"92190 MEUDON","tel":"0146378625","statut":"","lits":536,"urgences":false,"taux_occupation":64},{"finess":"920032182","nom":"CDS DENTAIRE COURBEVOIE LA DEFENSE","categorie":"Centre de Santé","lat":48.89604834579599,"lon":2.240539651091092,"adresse":"92400 COURBEVOIE","tel":"0184230423","statut":"","lits":516,"urgences":true,"taux_occupation":72},{"finess":"920032208","nom":"CDS ACCESS RADIOLOGIE","categorie":"Centre de Santé","lat":48.89968688809125,"lon":2.314300516195921,"adresse":"92110 CLICHY","tel":"0188337490","statut":"","lits":785,"urgences":false,"taux_occupation":84},{"finess":"920032281","nom":"CDS DENTAIRE ASNIERES","categorie":"Centre de Santé","lat":48.927387826058606,"lon":2.27406844619151,"adresse":"92600 ASNIERES SUR SEINE","tel":"","statut":"","lits":556,"urgences":true,"taux_occupation":75},{"finess":"920032323","nom":"CDS DENTAIRE DE BOIS-COLOMBES","categorie":"Centre de Santé","lat":48.90766013085066,"lon":2.2626571594934672,"adresse":"92270 BOIS COLOMBES","tel":"","statut":"","lits":201,"urgences":false,"taux_occupation":60},{"finess":"920032356","nom":"CDS DENTAIRE COLOMBES GARE","categorie":"Centre de Santé","lat":48.92375493264157,"lon":2.257675821249116,"adresse":"92700 COLOMBES","tel":"","statut":"","lits":159,"urgences":true,"taux_occupation":74},{"finess":"920032489","nom":"CDS MEDICO-DENTAIRE ISSY","categorie":"Centre de Santé","lat":48.826491003272274,"lon":2.2707317492380086,"adresse":"92130 ISSY LES MOULINEAUX","tel":"0667586262","statut":"","lits":230,"urgences":false,"taux_occupation":93},{"finess":"920032539","nom":"MSP DE SAINT CLOUD","categorie":"Maison de santé (L.6223-3)","lat":48.84276829913227,"lon":2.210982112327532,"adresse":"92210 ST CLOUD","tel":"0682915668","statut":"","lits":525,"urgences":true,"taux_occupation":95},{"finess":"920032984","nom":"CDS MEDICO DENTAIRE CALMEL","categorie":"Centre de Santé","lat":48.92520461632069,"lon":2.2907869297250576,"adresse":"92230 GENNEVILLIERS","tel":"0149206820","statut":"","lits":305,"urgences":true,"taux_occupation":89},{"finess":"920033123","nom":"CDS DENTAIRE CLAMART","categorie":"Centre de Santé","lat":48.7834782349884,"lon":2.243845435919072,"adresse":"92140 CLAMART","tel":"","statut":"","lits":186,"urgences":true,"taux_occupation":93},{"finess":"920033222","nom":"CDS ACCESS RADIOLOGIE","categorie":"Centre de Santé","lat":48.91344188527479,"lon":2.2955439840378817,"adresse":"92600 ASNIERES SUR SEINE","tel":"","statut":"","lits":622,"urgences":false,"taux_occupation":80},{"finess":"920033313","nom":"MSP PATRICK NOCHY","categorie":"Maison de santé (L.6223-3)","lat":48.9231135749564,"lon":2.297629287368024,"adresse":"92230 GENNEVILLIERS","tel":"0147126767","statut":"","lits":503,"urgences":false,"taux_occupation":92},{"finess":"920033339","nom":"MSP AVERROES","categorie":"Maison de santé (L.6223-3)","lat":48.93382609246735,"lon":2.3258307850952358,"adresse":"92390 VILLENEUVE LA GARENNE","tel":"0626696781","statut":"","lits":486,"urgences":false,"taux_occupation":88},{"finess":"920033354","nom":"MSP SISLEY","categorie":"Maison de santé (L.6223-3)","lat":48.93442080073981,"lon":2.333436898625266,"adresse":"92390 VILLENEUVE LA GARENNE","tel":"0626696781","statut":"","lits":212,"urgences":false,"taux_occupation":90},{"finess":"920033396","nom":"CDS MEDICAL DENTAIRE ASNIERES MAIRIE","categorie":"Centre de Santé","lat":48.91104323571098,"lon":2.2921559859785514,"adresse":"92600 ASNIERES SUR SEINE","tel":"0185016801","statut":"","lits":510,"urgences":true,"taux_occupation":75},{"finess":"920033404","nom":"CDS DENTAIRE ET ORTHO JEAN JAURES","categorie":"Centre de Santé","lat":48.86321103083328,"lon":2.2107215728184566,"adresse":"92150 SURESNES","tel":"","statut":"","lits":702,"urgences":true,"taux_occupation":93},{"finess":"920033511","nom":"CDS ACCES VISION NEUILLY","categorie":"Centre de Santé","lat":48.88543560398763,"lon":2.263477790482984,"adresse":"92200 NEUILLY SUR SEINE","tel":"","statut":"","lits":546,"urgences":false,"taux_occupation":75},{"finess":"920034030","nom":"CDS DENTAIRE DENTICLINIC","categorie":"Centre de Santé","lat":48.82969033053836,"lon":2.251551587188234,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"","statut":"","lits":331,"urgences":true,"taux_occupation":64},{"finess":"920034147","nom":"CDS DENTAIRE COLOMBES VALMY","categorie":"Centre de Santé","lat":48.92435219354229,"lon":2.252776141677852,"adresse":"92700 COLOMBES","tel":"0185016818","statut":"","lits":780,"urgences":true,"taux_occupation":75},{"finess":"920034493","nom":"MSP DES 4 CHEMINS DE COLOMBES","categorie":"Maison de santé (L.6223-3)","lat":48.91219278151145,"lon":2.227564613868554,"adresse":"92700 COLOMBES","tel":"0142424148","statut":"","lits":328,"urgences":true,"taux_occupation":80},{"finess":"920035045","nom":"CDS DENTIMAD SEVRES","categorie":"Centre de Santé","lat":48.82264540894299,"lon":2.2082533165803686,"adresse":"92310 SEVRES","tel":"","statut":"","lits":603,"urgences":true,"taux_occupation":68},{"finess":"920035052","nom":"CDS MEDICO-DENTAIRE CHATENAY MALABRY","categorie":"Centre de Santé","lat":48.768981063554335,"lon":2.2509485604613046,"adresse":"92290 CHATENAY MALABRY","tel":"","statut":"","lits":204,"urgences":true,"taux_occupation":84},{"finess":"920035904","nom":"CDS CLICHY BATIGNOLLES","categorie":"Centre de Santé","lat":48.89658408832524,"lon":2.308333034000681,"adresse":"92110 CLICHY","tel":"0148500242","statut":"","lits":760,"urgences":true,"taux_occupation":73},{"finess":"920035946","nom":"CDS MEDICAL OPHTALMOLOGIE NEUILLY CDG","categorie":"Centre de Santé","lat":48.87945588898096,"lon":2.278242246819587,"adresse":"92200 NEUILLY SUR SEINE","tel":"","statut":"","lits":115,"urgences":true,"taux_occupation":86},{"finess":"920036027","nom":"CDS DENTAIRE LES SABLONS","categorie":"Centre de Santé","lat":48.8807549912358,"lon":2.2741526080484644,"adresse":"92200 NEUILLY SUR SEINE","tel":"","statut":"","lits":388,"urgences":false,"taux_occupation":89},{"finess":"920036167","nom":"CDS DENTAIRE NANTERRE PREFECTURE","categorie":"Centre de Santé","lat":48.895112035031005,"lon":2.2229991696167244,"adresse":"92000 NANTERRE","tel":"","statut":"","lits":475,"urgences":true,"taux_occupation":73},{"finess":"920036175","nom":"CDS DENTAIRE DENTOLIB LEVALLOIS","categorie":"Centre de Santé","lat":48.89232634253717,"lon":2.2908992738258487,"adresse":"92300 LEVALLOIS PERRET","tel":"","statut":"","lits":480,"urgences":true,"taux_occupation":61},{"finess":"920036183","nom":"MSP GENNEVILLIERS VILLENEUVE LA G","categorie":"Maison de santé (L.6223-3)","lat":48.91988717117943,"lon":2.2920261326405487,"adresse":"92230 GENNEVILLIERS","tel":"0626696781","statut":"","lits":639,"urgences":true,"taux_occupation":90},{"finess":"920036233","nom":"CMS LES EPINETTES ISSY LES MOULINEAUX","categorie":"Centre de Santé","lat":48.81838827649238,"lon":2.259730235700156,"adresse":"92130 ISSY LES MOULINEAUX","tel":"","statut":"","lits":56,"urgences":true,"taux_occupation":79},{"finess":"920036241","nom":"CDS OPHTALMOLOGIQUE OPHTA +","categorie":"Centre de Santé","lat":48.908235557009576,"lon":2.2862417604308067,"adresse":"92600 ASNIERES SUR SEINE","tel":"0142049121","statut":"","lits":449,"urgences":true,"taux_occupation":94},{"finess":"920036332","nom":"CDS D'ORTHODONTIE SMILE ART","categorie":"Centre de Santé","lat":48.88276872182785,"lon":2.181445053917753,"adresse":"92500 RUEIL MALMAISON","tel":"","statut":"","lits":609,"urgences":false,"taux_occupation":74},{"finess":"920036456","nom":"CDS DENTAIRE DE L ESPACE CLICHY","categorie":"Centre de Santé","lat":48.903562080993126,"lon":2.31792862487431,"adresse":"92110 CLICHY","tel":"0147392552","statut":"","lits":549,"urgences":true,"taux_occupation":77},{"finess":"920036472","nom":"CDS DENTAIRE ODONTALIA","categorie":"Centre de Santé","lat":48.81069641347634,"lon":2.3131842764379607,"adresse":"92120 MONTROUGE","tel":"0142378509","statut":"","lits":496,"urgences":true,"taux_occupation":61},{"finess":"920036498","nom":"CDS DE L'EUROPE","categorie":"Centre de Santé","lat":48.92628784498635,"lon":2.2436575932549063,"adresse":"92700 COLOMBES","tel":"0769562652","statut":"","lits":448,"urgences":true,"taux_occupation":85},{"finess":"920036514","nom":"CDS DENTAIRE BOIS COLOMBES","categorie":"Centre de Santé","lat":48.91590905843498,"lon":2.2762930493032347,"adresse":"92270 BOIS COLOMBES","tel":"0185016474","statut":"","lits":791,"urgences":true,"taux_occupation":89},{"finess":"920036555","nom":"CDS MEDICO OPHTALMO BERGES DE SEINE","categorie":"Centre de Santé","lat":48.90960008035208,"lon":2.3077398521828547,"adresse":"92110 CLICHY","tel":"","statut":"","lits":180,"urgences":false,"taux_occupation":94},{"finess":"920036563","nom":"CDS OPHTALMOLOGIE NANTERRE LA BOULE","categorie":"Centre de Santé","lat":48.88627000289107,"lon":2.197941650564792,"adresse":"92000 NANTERRE","tel":"0615471876","statut":"","lits":77,"urgences":true,"taux_occupation":61},{"finess":"920036597","nom":"CDS CTAR 92","categorie":"Centre de Santé","lat":48.79588168796796,"lon":2.2923968045470744,"adresse":"92260 FONTENAY AUX ROSES","tel":"0141878805","statut":"","lits":135,"urgences":false,"taux_occupation":87},{"finess":"920036613","nom":"HDJ RUEIL MALMAISON","categorie":"Maison de Santé pour Maladies Mentales","lat":48.87790444543117,"lon":2.180569772261789,"adresse":"92500 RUEIL MALMAISON","tel":"","statut":"Etablissement de santé privé d","lits":188,"urgences":true,"taux_occupation":71},{"finess":"920036647","nom":"CDS DENTAIRE DE FRANCE","categorie":"Centre de Santé","lat":48.8884599926285,"lon":2.16855365337934,"adresse":"92500 RUEIL MALMAISON","tel":"0623141264","statut":"","lits":101,"urgences":true,"taux_occupation":84},{"finess":"920036688","nom":"MSP COEUR DE VILLE","categorie":"Maison de santé (L.6223-3)","lat":48.802797764469474,"lon":2.2870433720150487,"adresse":"92320 CHATILLON","tel":"","statut":"","lits":385,"urgences":true,"taux_occupation":89},{"finess":"920036712","nom":"CDS DENTAIRE BLR","categorie":"Centre de Santé","lat":48.785376079558695,"lon":2.3178294603883725,"adresse":"92340 BOURG LA REINE","tel":"0621893818","statut":"","lits":384,"urgences":true,"taux_occupation":84},{"finess":"920036753","nom":"CDS DENTAIRE DENTAL NUMERIC","categorie":"Centre de Santé","lat":48.91114422527321,"lon":2.2973951500059755,"adresse":"92600 ASNIERES SUR SEINE","tel":"","statut":"","lits":334,"urgences":true,"taux_occupation":76},{"finess":"920036795","nom":"CDS ESPACE SANTE RUEIL","categorie":"Centre de Santé","lat":48.88730676116191,"lon":2.170459517860323,"adresse":"92500 RUEIL MALMAISON","tel":"0158783333","statut":"","lits":133,"urgences":true,"taux_occupation":61},{"finess":"920036837","nom":"CDS MEDI ET OPHTA LOUISE MICHEL","categorie":"Centre de Santé","lat":48.88824914148936,"lon":2.286720295255599,"adresse":"92300 LEVALLOIS PERRET","tel":"0185013015","statut":"","lits":602,"urgences":true,"taux_occupation":82},{"finess":"920036860","nom":"MSP MAISON DE SANTE MARCHERON","categorie":"Maison de santé (L.6223-3)","lat":48.819461778940735,"lon":2.288560204434947,"adresse":"92170 VANVES","tel":"0625253787","statut":"","lits":279,"urgences":false,"taux_occupation":64},{"finess":"920036969","nom":"CDS MEDICAL ET DENTAIRE PUTEAUX","categorie":"Centre de Santé","lat":48.88305633821796,"lon":2.2419264027399004,"adresse":"92800 PUTEAUX","tel":"0180240055","statut":"","lits":717,"urgences":true,"taux_occupation":61},{"finess":"920036985","nom":"CDS UN MONDE MEILLEUR DENTAL VISION","categorie":"Centre de Santé","lat":48.89538258326532,"lon":2.220623193569219,"adresse":"92000 NANTERRE","tel":"","statut":"","lits":303,"urgences":true,"taux_occupation":61},{"finess":"920037025","nom":"CDS MEDICO DENTAIRE DE VILLENEUVE","categorie":"Centre de Santé","lat":48.93559935333858,"lon":2.331102655951061,"adresse":"92390 VILLENEUVE LA GARENNE","tel":"0184781010","statut":"","lits":686,"urgences":true,"taux_occupation":75},{"finess":"920037066","nom":"CDS OPHTALMOLOGIQUE DE COLOMBES","categorie":"Centre de Santé","lat":48.92628784498635,"lon":2.2436575932549063,"adresse":"92700 COLOMBES","tel":"0699745000","statut":"","lits":179,"urgences":true,"taux_occupation":67},{"finess":"920037090","nom":"CDS NANTERRE UNIVERSITE","categorie":"Centre de Santé","lat":48.90048858137554,"lon":2.214367369687847,"adresse":"92000 NANTERRE","tel":"0769843676","statut":"","lits":627,"urgences":true,"taux_occupation":89},{"finess":"920037173","nom":"CDS POLEMED PLUS","categorie":"Centre de Santé","lat":48.93475198289709,"lon":2.3268834723343974,"adresse":"92390 VILLENEUVE LA GARENNE","tel":"0147931313","statut":"","lits":766,"urgences":true,"taux_occupation":83},{"finess":"920037181","nom":"CDS D'ASNIERES BOIS COLOMBES","categorie":"Centre de Santé","lat":48.91360018889231,"lon":2.273266091637842,"adresse":"92270 BOIS COLOMBES","tel":"0184208626","statut":"","lits":221,"urgences":false,"taux_occupation":67},{"finess":"920037207","nom":"CDS DENTAIRE CLAMART MAIRIE","categorie":"Centre de Santé","lat":48.80193189997239,"lon":2.264376464422614,"adresse":"92140 CLAMART","tel":"0184990111","statut":"","lits":217,"urgences":true,"taux_occupation":66},{"finess":"920037256","nom":"CDS G SMILE","categorie":"Centre de Santé","lat":48.83013479291525,"lon":2.280448113961262,"adresse":"92130 ISSY LES MOULINEAUX","tel":"0184760595","statut":"","lits":642,"urgences":true,"taux_occupation":79},{"finess":"920037272","nom":"CDS MEDICO OPHTALMOLOGIQUE ISSY","categorie":"Centre de Santé","lat":48.82213536542306,"lon":2.261658809056636,"adresse":"92130 ISSY LES MOULINEAUX","tel":"0699021371","statut":"","lits":639,"urgences":false,"taux_occupation":84},{"finess":"920037298","nom":"CDS D'OPHTALMOLOGIE DU LUTH","categorie":"Centre de Santé","lat":48.933209930849166,"lon":2.2901400068482887,"adresse":"92230 GENNEVILLIERS","tel":"0629319806","statut":"","lits":456,"urgences":false,"taux_occupation":72},{"finess":"920037405","nom":"CDS DENTAIRE ET D OPHTALMOGIE VOLTAIRE","categorie":"Centre de Santé","lat":48.91277117256201,"lon":2.295726342727773,"adresse":"92600 ASNIERES SUR SEINE","tel":"0615471876","statut":"","lits":127,"urgences":false,"taux_occupation":75},{"finess":"920037454","nom":"CDS DENTAIRE D'ANTONY","categorie":"Centre de Santé","lat":48.76148956913036,"lon":2.3083436179578727,"adresse":"92160 ANTONY","tel":"0143003838","statut":"","lits":154,"urgences":false,"taux_occupation":79},{"finess":"920037488","nom":"CDS ESPACE DENTAIRE MALAKOFF","categorie":"Centre de Santé","lat":48.81913092064904,"lon":2.303242563411924,"adresse":"92240 MALAKOFF","tel":"0185626200","statut":"","lits":750,"urgences":false,"taux_occupation":67},{"finess":"920037504","nom":"CDS DENTAIRE DU PANORAMA","categorie":"Centre de Santé","lat":48.789599916233605,"lon":2.2614291230518364,"adresse":"92140 CLAMART","tel":"0667972831","statut":"","lits":629,"urgences":true,"taux_occupation":82},{"finess":"920037520","nom":"CDS INWE CARE SAINT CLOUD","categorie":"Centre de Santé","lat":48.85118059219779,"lon":2.221900316430176,"adresse":"92210 ST CLOUD","tel":"","statut":"","lits":595,"urgences":true,"taux_occupation":83},{"finess":"920037637","nom":"CDS MEDICAL ET DENTAIRE NEUILLY","categorie":"Centre de Santé","lat":48.88237075606197,"lon":2.2690697015577785,"adresse":"92200 NEUILLY SUR SEINE","tel":"0185012505","statut":"","lits":120,"urgences":false,"taux_occupation":81},{"finess":"920037678","nom":"CDS REFAEL","categorie":"Centre de Santé","lat":48.87385079075567,"lon":2.2299724766902185,"adresse":"92150 SURESNES","tel":"0629319806","statut":"","lits":62,"urgences":true,"taux_occupation":91},{"finess":"920037686","nom":"CDS OPHTALMO DENTAIRE DE RUEIL","categorie":"Centre de Santé","lat":48.88890075226603,"lon":2.169731762896616,"adresse":"92500 RUEIL MALMAISON","tel":"0187122626","statut":"","lits":158,"urgences":true,"taux_occupation":83},{"finess":"920037900","nom":"CDS DENTAIRE DENTAPTE ANTONY","categorie":"Centre de Santé","lat":48.76950645102125,"lon":2.3163605390186484,"adresse":"92160 ANTONY","tel":"0186708607","statut":"","lits":700,"urgences":true,"taux_occupation":69},{"finess":"920037942","nom":"CDS MEDICAL JOFFRE","categorie":"Centre de Santé","lat":48.78102923103377,"lon":2.314218491664981,"adresse":"92340 BOURG LA REINE","tel":"","statut":"","lits":495,"urgences":true,"taux_occupation":93},{"finess":"920037967","nom":"CDS MEDICO DENTAIRE DENTOTOP BAGNEUX","categorie":"Centre de Santé","lat":48.78766416083363,"lon":2.305181810241193,"adresse":"92220 BAGNEUX","tel":"0189162800","statut":"","lits":716,"urgences":true,"taux_occupation":94},{"finess":"920038031","nom":"CDS FOCH PARIS LA DEFENSE","categorie":"Centre de Santé","lat":48.88972648365932,"lon":2.2463039676743226,"adresse":"92400 COURBEVOIE","tel":"0146255515","statut":"","lits":545,"urgences":true,"taux_occupation":87},{"finess":"920038056","nom":"CDS OPHTALMOLOGIQUE ET DENTAIRE RUEIL","categorie":"Centre de Santé","lat":48.88353777461793,"lon":2.190322683182143,"adresse":"92500 RUEIL MALMAISON","tel":"0186709112","statut":"","lits":798,"urgences":false,"taux_occupation":77},{"finess":"920038148","nom":"CDS ATRIUM DEFENSE","categorie":"Centre de Santé","lat":48.90706064930403,"lon":2.2398400855429896,"adresse":"92250 LA GARENNE COLOMBES","tel":"0186909661","statut":"","lits":380,"urgences":true,"taux_occupation":65},{"finess":"920038155","nom":"CDS MEDICO DENTAIRE GARENNE-COLOMBES","categorie":"Centre de Santé","lat":48.91045906919201,"lon":2.254706972399278,"adresse":"92250 LA GARENNE COLOMBES","tel":"","statut":"","lits":335,"urgences":true,"taux_occupation":75},{"finess":"920038171","nom":"CDS DE SCEAUX","categorie":"Centre de Santé","lat":48.7791992392711,"lon":2.28211944035163,"adresse":"92330 SCEAUX","tel":"","statut":"","lits":525,"urgences":false,"taux_occupation":84},{"finess":"920038262","nom":"CDS DENTAIRE DES BLAGIS","categorie":"Centre de Santé","lat":48.7844566883049,"lon":2.30391654868865,"adresse":"92330 SCEAUX","tel":"0146607274","statut":"","lits":394,"urgences":true,"taux_occupation":91},{"finess":"920038288","nom":"CDS OPHTALMOLOGIE DE SURESNES","categorie":"Centre de Santé","lat":48.87523213308016,"lon":2.231222778116676,"adresse":"92150 SURESNES","tel":"0184131555","statut":"","lits":382,"urgences":true,"taux_occupation":91},{"finess":"920038296","nom":"CDS SMILEFORLIFE","categorie":"Centre de Santé","lat":48.81302812083967,"lon":2.2385716499060133,"adresse":"92190 MEUDON","tel":"","statut":"","lits":267,"urgences":true,"taux_occupation":76},{"finess":"920038502","nom":"CDS OPHTALMO LA GARENNE COLOMBES","categorie":"Centre de Santé","lat":48.91045906919201,"lon":2.254706972399278,"adresse":"92250 LA GARENNE COLOMBES","tel":"0613250142","statut":"","lits":398,"urgences":true,"taux_occupation":77},{"finess":"920038528","nom":"CDS MEDIPLUS SANTE","categorie":"Centre de Santé","lat":48.91019601664401,"lon":2.235230534029569,"adresse":"92700 COLOMBES","tel":"0140607777","statut":"","lits":619,"urgences":true,"taux_occupation":93},{"finess":"920038577","nom":"CDS DENTAIRE ASNIERES GENNEVILLIERS","categorie":"Centre de Santé","lat":48.91540317207021,"lon":2.3025963523755464,"adresse":"92600 ASNIERES SUR SEINE","tel":"0671242850","statut":"","lits":245,"urgences":true,"taux_occupation":75},{"finess":"920038668","nom":"MSP POLE DE SANTE BIRET","categorie":"Maison de santé (L.6223-3)","lat":48.79604887987105,"lon":2.2772004058779363,"adresse":"92320 CHATILLON","tel":"0185745557","statut":"","lits":787,"urgences":true,"taux_occupation":91},{"finess":"920038759","nom":"MSP REPUBLIQUE","categorie":"Maison de santé (L.6223-3)","lat":48.91569159709045,"lon":2.2684734480323776,"adresse":"92270 BOIS COLOMBES","tel":"","statut":"","lits":618,"urgences":true,"taux_occupation":90},{"finess":"920038775","nom":"MSP LA CASA MEDICALE","categorie":"Maison de santé (L.6223-3)","lat":48.87979022427676,"lon":2.2414053428782528,"adresse":"92800 PUTEAUX","tel":"0142703085","statut":"","lits":711,"urgences":false,"taux_occupation":91},{"finess":"920038924","nom":"CDS MEDICO DENTAIRE DENTOTOP CHAVILLE","categorie":"Centre de Santé","lat":48.80896485234703,"lon":2.18883058556802,"adresse":"92370 CHAVILLE","tel":"0184191414","statut":"","lits":508,"urgences":true,"taux_occupation":65},{"finess":"920039104","nom":"CDS ASNIERES SUR SEINE","categorie":"Centre de Santé","lat":48.93098324588605,"lon":2.2828846085063152,"adresse":"92600 ASNIERES SUR SEINE","tel":"","statut":"","lits":351,"urgences":true,"taux_occupation":85},{"finess":"920039120","nom":"CDS DENTAIRE DE BAGNEUX","categorie":"Centre de Santé","lat":48.79974198866298,"lon":2.3228382438531976,"adresse":"92220 BAGNEUX","tel":"0781537782","statut":"","lits":758,"urgences":true,"taux_occupation":79},{"finess":"920039203","nom":"CDS MEDICO DENTAIRE COURBEVOIE CHARRAS","categorie":"Centre de Santé","lat":48.89362264676124,"lon":2.252225610179181,"adresse":"92400 COURBEVOIE","tel":"0185013070","statut":"","lits":729,"urgences":false,"taux_occupation":83},{"finess":"920039260","nom":"CDS DE VISION ET D OPHTALMOLOGIE","categorie":"Centre de Santé","lat":48.802971807431696,"lon":2.287271093241531,"adresse":"92320 CHATILLON","tel":"0157639706","statut":"","lits":534,"urgences":false,"taux_occupation":93},{"finess":"920039286","nom":"CDS ET D OPHTALMOLOGIE MEDECVISION","categorie":"Centre de Santé","lat":48.80941831874583,"lon":2.2963173256533804,"adresse":"92320 CHATILLON","tel":"0141416431","statut":"","lits":402,"urgences":true,"taux_occupation":95},{"finess":"920039310","nom":"MSP DES CHENEVREUX","categorie":"Maison de santé (L.6223-3)","lat":48.88545770677314,"lon":2.2111794198540538,"adresse":"92000 NANTERRE","tel":"0609971319","statut":"","lits":388,"urgences":true,"taux_occupation":89},{"finess":"920039575","nom":"CDS MÉDECINDIRECT","categorie":"Centre de Santé","lat":48.89955897044079,"lon":2.2608949437527017,"adresse":"92400 COURBEVOIE","tel":"0974999476","statut":"","lits":327,"urgences":true,"taux_occupation":76},{"finess":"920039591","nom":"CDS OPHTALMOLOGIQUE DE CHAVILLE","categorie":"Centre de Santé","lat":48.81415221944949,"lon":2.193024733554089,"adresse":"92370 CHAVILLE","tel":"0613250142","statut":"","lits":286,"urgences":true,"taux_occupation":72},{"finess":"920039617","nom":"CDS DENTAIRE ECO LA VALLEE CHATENAY","categorie":"Centre de Santé","lat":48.76368572734692,"lon":2.2886986402818,"adresse":"92290 CHATENAY MALABRY","tel":"0184219993","statut":"","lits":373,"urgences":true,"taux_occupation":94},{"finess":"920039625","nom":"CDS MEDICO DENTAIRE DE BAGNEUX","categorie":"Centre de Santé","lat":48.79667159855885,"lon":2.3215984126789846,"adresse":"92220 BAGNEUX","tel":"0625900599","statut":"","lits":756,"urgences":true,"taux_occupation":72},{"finess":"920039799","nom":"CDS VANVES SANTE","categorie":"Centre de Santé","lat":48.81877144473246,"lon":2.288173295392582,"adresse":"92170 VANVES","tel":"0155648881","statut":"","lits":271,"urgences":false,"taux_occupation":90},{"finess":"920039849","nom":"CDS MED DENTAIRE MALAKOFF STALINGRAD","categorie":"Centre de Santé","lat":48.811339743853885,"lon":2.2951502472089618,"adresse":"92240 MALAKOFF","tel":"0180872680","statut":"","lits":333,"urgences":false,"taux_occupation":93},{"finess":"920039930","nom":"MSP LA FONTAINE","categorie":"Maison de santé (L.6223-3)","lat":48.77052916150137,"lon":2.314331962964796,"adresse":"92160 ANTONY","tel":"0146830568","statut":"","lits":661,"urgences":true,"taux_occupation":66},{"finess":"920040037","nom":"CDS CENTRE DENTAIRE COLOMBES","categorie":"Centre de Santé","lat":48.91164722423856,"lon":2.232372640652192,"adresse":"92700 COLOMBES","tel":"0147850000","statut":"","lits":248,"urgences":true,"taux_occupation":74},{"finess":"920040102","nom":"CDS CENTRE DENTAIRE DE BAGNEUX","categorie":"Centre de Santé","lat":48.791597169322,"lon":2.319859396247292,"adresse":"92220 BAGNEUX","tel":"0184742929","statut":"","lits":419,"urgences":true,"taux_occupation":79},{"finess":"920040136","nom":"CDS OPHTA HIPPODROME ST CLOUD","categorie":"Centre de Santé","lat":48.8622479013941,"lon":2.1950713897381355,"adresse":"92500 RUEIL MALMAISON","tel":"0140677742","statut":"","lits":64,"urgences":false,"taux_occupation":94},{"finess":"920040334","nom":"CDS CENTRE MEDICAL MONTROUGE","categorie":"Centre de Santé","lat":48.81326157748525,"lon":2.3021743433939723,"adresse":"92120 MONTROUGE","tel":"0184190780","statut":"","lits":179,"urgences":true,"taux_occupation":62},{"finess":"920040649","nom":"MSP ESPOIRS D'ASNIERES","categorie":"Maison de santé (L.6223-3)","lat":48.93169287927716,"lon":2.2757213371388003,"adresse":"92600 ASNIERES SUR SEINE","tel":"0177627769","statut":"","lits":105,"urgences":false,"taux_occupation":78},{"finess":"920040698","nom":"CDS POLE DENTAIRE DU LAC PANORAMA","categorie":"Centre de Santé","lat":48.79353069261802,"lon":2.27159681053042,"adresse":"92140 CLAMART","tel":"0188335250","statut":"","lits":764,"urgences":true,"taux_occupation":91},{"finess":"920040755","nom":"CDS SOS OPHTALMO MEUDON","categorie":"Centre de Santé","lat":48.786970817422095,"lon":2.2275551738345785,"adresse":"92190 MEUDON","tel":"0142464545","statut":"","lits":155,"urgences":true,"taux_occupation":78},{"finess":"920041142","nom":"CDS CENTRE MED RAMSAY SANTE RUEIL MAL","categorie":"Centre de Santé","lat":48.87817581678176,"lon":2.175427744674661,"adresse":"92500 RUEIL MALMAISON","tel":"0186868000","statut":"","lits":530,"urgences":true,"taux_occupation":88},{"finess":"920042082","nom":"CH PAUL GUIRAUD SITE ABONDANCES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.84667329005306,"lon":2.232675640679545,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0142117090","statut":"Etablissement public de santé","lits":398,"urgences":true,"taux_occupation":63},{"finess":"920042678","nom":"CDS HOPSOIN VERDIER","categorie":"Centre de Santé","lat":48.8161158880112,"lon":2.309705474757879,"adresse":"92120 MONTROUGE","tel":"","statut":"","lits":308,"urgences":true,"taux_occupation":67},{"finess":"920042694","nom":"CDS DENTAIRE FONTENAY","categorie":"Centre de Santé","lat":48.79346472461102,"lon":2.2835975291152995,"adresse":"92260 FONTENAY AUX ROSES","tel":"","statut":"","lits":116,"urgences":true,"taux_occupation":91},{"finess":"920042710","nom":"CDS CENTRE MEDICO DENTAIRE SMILEST","categorie":"Centre de Santé","lat":48.82381698508279,"lon":2.2739591579047795,"adresse":"92130 ISSY LES MOULINEAUX","tel":"","statut":"","lits":125,"urgences":false,"taux_occupation":63},{"finess":"920042751","nom":"CDS DENTISPHERE","categorie":"Centre de Santé","lat":48.90229907239546,"lon":2.273809916705823,"adresse":"92400 COURBEVOIE","tel":"0189292222","statut":"","lits":205,"urgences":true,"taux_occupation":79},{"finess":"920042892","nom":"CDS POLE OPHTALMOLOGIQUE D'ANTONY","categorie":"Centre de Santé","lat":48.75496581957687,"lon":2.2973777251290244,"adresse":"92160 ANTONY","tel":"0184991155","statut":"","lits":137,"urgences":true,"taux_occupation":67},{"finess":"920043031","nom":"MSP DE CHAVILLE","categorie":"Maison de santé (L.6223-3)","lat":48.808801275991854,"lon":2.18898019426423,"adresse":"92370 CHAVILLE","tel":"","statut":"","lits":621,"urgences":true,"taux_occupation":74},{"finess":"920043056","nom":"MSP DU POLE VANVEEN","categorie":"Maison de santé (L.6223-3)","lat":48.82147243452539,"lon":2.284277810235022,"adresse":"92170 VANVES","tel":"","statut":"","lits":585,"urgences":true,"taux_occupation":88},{"finess":"920043072","nom":"CDS MEDICAL DE BAGNEUX","categorie":"Centre de Santé","lat":48.79908129154077,"lon":2.3227433518294585,"adresse":"92220 BAGNEUX","tel":"0189705482","statut":"","lits":503,"urgences":true,"taux_occupation":87},{"finess":"920043189","nom":"CDS CENTRE DE SANTE DE LEVALLOIS","categorie":"Centre de Santé","lat":48.89046457170973,"lon":2.281968374242906,"adresse":"92300 LEVALLOIS PERRET","tel":"","statut":"","lits":362,"urgences":false,"taux_occupation":63},{"finess":"920043296","nom":"MSP LA COLOMBE","categorie":"Maison de santé (L.6223-3)","lat":48.93199777624154,"lon":2.2550412914528297,"adresse":"92700 COLOMBES","tel":"","statut":"","lits":674,"urgences":false,"taux_occupation":66},{"finess":"920043411","nom":"CDS SORRISO DENTAL STUDIO","categorie":"Centre de Santé","lat":48.84709242710417,"lon":2.195977296121224,"adresse":"92380 GARCHES","tel":"","statut":"","lits":262,"urgences":false,"taux_occupation":73},{"finess":"920043601","nom":"CDS VANVES MEDICAL SANTE","categorie":"Centre de Santé","lat":48.82589236074413,"lon":2.2928026882745467,"adresse":"92170 VANVES","tel":"0146384833","statut":"","lits":320,"urgences":false,"taux_occupation":65},{"finess":"920044195","nom":"MSP ORCHIDEE","categorie":"Maison de santé (L.6223-3)","lat":48.93382609246735,"lon":2.3258307850952358,"adresse":"92390 VILLENEUVE LA GARENNE","tel":"","statut":"","lits":210,"urgences":true,"taux_occupation":71},{"finess":"920044351","nom":"CDS COMSANTE","categorie":"Centre de Santé","lat":48.92000168955708,"lon":2.2852616111009008,"adresse":"92600 ASNIERES SUR SEINE","tel":"0146880999","statut":"","lits":615,"urgences":true,"taux_occupation":70},{"finess":"920044534","nom":"CDS ISSY LES MOULINEAUX","categorie":"Centre de Santé","lat":48.82234278546841,"lon":2.2571025392162647,"adresse":"92130 ISSY LES MOULINEAUX","tel":"0189562253","statut":"","lits":52,"urgences":true,"taux_occupation":88},{"finess":"920044641","nom":"CDS CENTRE MEDICAL PARIS LEVALLOIS","categorie":"Centre de Santé","lat":48.89487085319224,"lon":2.2978207198581493,"adresse":"92300 LEVALLOIS PERRET","tel":"0180883716","statut":"","lits":755,"urgences":false,"taux_occupation":90},{"finess":"920044708","nom":"MSP VERTS COTEAUX CHATENEY MALABRY","categorie":"Maison de santé (L.6223-3)","lat":48.76786813695247,"lon":2.2530503768796803,"adresse":"92290 CHATENAY MALABRY","tel":"0146323959","statut":"","lits":348,"urgences":true,"taux_occupation":74},{"finess":"920044799","nom":"MSP ASNIERES BORDS DE SEINE","categorie":"Maison de santé (L.6223-3)","lat":48.91867602956088,"lon":2.3130746394156634,"adresse":"92600 ASNIERES SUR SEINE","tel":"","statut":"","lits":345,"urgences":false,"taux_occupation":78},{"finess":"920044831","nom":"MSP MIKERA","categorie":"Maison de santé (L.6223-3)","lat":48.89213442696072,"lon":2.283286031550297,"adresse":"92300 LEVALLOIS PERRET","tel":"","statut":"","lits":769,"urgences":true,"taux_occupation":64},{"finess":"920044864","nom":"CSS DE NANTERRE","categorie":"Centre de santé sexuelle","lat":48.89164585296042,"lon":2.193996348421135,"adresse":"92000 NANTERRE","tel":"0189354200","statut":"","lits":753,"urgences":true,"taux_occupation":76},{"finess":"920044963","nom":"MSP MEDITIM BOULOGNE BILLANCOURT OUEST","categorie":"Maison de santé (L.6223-3)","lat":48.83299875343722,"lon":2.2274425858372,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0184796350","statut":"","lits":690,"urgences":false,"taux_occupation":72},{"finess":"920100013","nom":"GHU APHP UPS SITE AMBROISE PARE","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.8490294359329,"lon":2.2372852033936987,"adresse":"92104 BOULOGNE BILLANCOURT CEDEX","tel":"0149095000","statut":"Etablissement public de santé","lits":485,"urgences":true,"taux_occupation":94},{"finess":"920100021","nom":"GHU APHP UPS SITE ANTOINE BECLERE","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.7899121969809,"lon":2.253785628435556,"adresse":"92140 CLAMART","tel":"0145374444","statut":"Etablissement public de santé","lits":280,"urgences":false,"taux_occupation":69},{"finess":"920100039","nom":"GHU APHP NUP SITE BEAUJON","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.90850944781083,"lon":2.30778027944977,"adresse":"92118 CLICHY CEDEX","tel":"0140875000","statut":"Etablissement public de santé","lits":322,"urgences":true,"taux_occupation":64},{"finess":"920100047","nom":"GHU APHP NUP SITE LOUIS MOURIER","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.92344885977039,"lon":2.23602242591861,"adresse":"92701 COLOMBES CEDEX","tel":"0147606162","statut":"Etablissement public de santé","lits":111,"urgences":true,"taux_occupation":79},{"finess":"920100054","nom":"GHU APHP UPS SITE RAYMOND POINCARE","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.83837956877017,"lon":2.1707313885144868,"adresse":"92380 GARCHES","tel":"0147107900","statut":"Etablissement public de santé","lits":659,"urgences":false,"taux_occupation":78},{"finess":"920100062","nom":"GHU APHP CUP SITE CELTON","categorie":"Centre Hospitalier Régional (C.H.R.)","lat":48.828200317620485,"lon":2.279417747256505,"adresse":"92133 ISSY LES MOULINEAUX CEDEX","tel":"0158004000","statut":"Etablissement public de santé","lits":499,"urgences":true,"taux_occupation":89},{"finess":"920120011","nom":"HOPITAL INSTRUCTION DES ARMEES PERCY","categorie":"Hôpital des armées","lat":48.81452198101134,"lon":2.257585740186155,"adresse":"92141 CLAMART CEDEX","tel":"0141466000","statut":"Etablissement public de santé","lits":755,"urgences":true,"taux_occupation":85},{"finess":"920140019","nom":"CTRE DE SANTE MENTALE DE RUEIL MGEN","categorie":"Maison de Santé pour Maladies Mentales","lat":48.869876998780974,"lon":2.1832304413594628,"adresse":"92500 RUEIL MALMAISON","tel":"0141392900","statut":"Etablissement de santé privé d","lits":328,"urgences":false,"taux_occupation":94},{"finess":"920140027","nom":"CLINIQUE FSEF SCEAUX","categorie":"Maison de Santé pour Maladies Mentales","lat":48.777542096902565,"lon":2.300395659393101,"adresse":"92333 SCEAUX CEDEX","tel":"0140915050","statut":"Etablissement de santé privé d","lits":555,"urgences":true,"taux_occupation":65},{"finess":"920140035","nom":"HDJ ET DE NUIT ANTONIN  ARTHAUD","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.91726221263468,"lon":2.297852902368396,"adresse":"92230 GENNEVILLIERS","tel":"0141322515","statut":"Etablissement public de santé","lits":662,"urgences":true,"taux_occupation":87},{"finess":"920140043","nom":"HDJ CMP CATTP","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.74472084273578,"lon":2.2960984315318345,"adresse":"92160 ANTONY","tel":"","statut":"Etablissement public de santé","lits":380,"urgences":false,"taux_occupation":76},{"finess":"920170016","nom":"HDJ D ANTONY","categorie":"Maison de Santé pour Maladies Mentales","lat":48.73570859449225,"lon":2.30519582502404,"adresse":"92167 ANTONY CEDEX","tel":"0146668095","statut":"Etab de santé privé non lucrat","lits":76,"urgences":true,"taux_occupation":74},{"finess":"920170024","nom":"CENTRE DENISE CROISSANT","categorie":"Maison de Santé pour Maladies Mentales","lat":48.77171959621061,"lon":2.258262639604094,"adresse":"92290 CHATENAY MALABRY","tel":"0146301111","statut":"Etab de santé privé non lucrat","lits":740,"urgences":false,"taux_occupation":61},{"finess":"920170040","nom":"HDJ CASH DE NANTERRE","categorie":"Centre Hospitalier (C.H.)","lat":48.89209440493974,"lon":2.1894340257396125,"adresse":"92000 NANTERRE","tel":"0147214000","statut":"Etablissement public de santé","lits":738,"urgences":true,"taux_occupation":62},{"finess":"920170081","nom":"HDJ ATELIER THERAP ELAN RETROUVE","categorie":"Maison de Santé pour Maladies Mentales","lat":48.918170448127874,"lon":2.2386502838501783,"adresse":"92700 COLOMBES","tel":"0141192230","statut":"Etablissement de santé privé d","lits":229,"urgences":true,"taux_occupation":93},{"finess":"920170115","nom":"CENTRE DU PARC DE SAINT CLOUD AVRAY","categorie":"Maison de Santé pour Maladies Mentales","lat":48.8289421646434,"lon":2.196672709075604,"adresse":"92410 VILLE D AVRAY","tel":"0147098237","statut":"Etab de santé privé non lucrat","lits":717,"urgences":true,"taux_occupation":77},{"finess":"920170149","nom":"HDJ CMP 92 G 09 JEAN WIER","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.876739283337386,"lon":2.2320390694770844,"adresse":"92150 SURESNES","tel":"0142117860","statut":"Etablissement public de santé","lits":235,"urgences":false,"taux_occupation":87},{"finess":"920310026","nom":"CLINIQUE NEUROPSY LES PERVENCHES","categorie":"Maison de Santé pour Maladies Mentales","lat":48.79498068581562,"lon":2.277845503028596,"adresse":"92260 FONTENAY AUX ROSES","tel":"0146612607","statut":"Non concerné","lits":700,"urgences":true,"taux_occupation":65},{"finess":"920310034","nom":"CLINIQUE DU CHATEAU DE GARCHES","categorie":"Maison de Santé pour Maladies Mentales","lat":48.843166975351416,"lon":2.198975630589428,"adresse":"92380 GARCHES","tel":"0147956300","statut":"Non concerné","lits":531,"urgences":true,"taux_occupation":86},{"finess":"920310042","nom":"MAISON DE SANTE BELLEVUE","categorie":"Maison de Santé pour Maladies Mentales","lat":48.81998156403933,"lon":2.224610469848052,"adresse":"92190 MEUDON","tel":"0141141500","statut":"Non concerné","lits":391,"urgences":true,"taux_occupation":66},{"finess":"920310059","nom":"CLINIQUE MEDICALE DE VILLE D AVRAY","categorie":"Maison de Santé pour Maladies Mentales","lat":48.8290122736948,"lon":2.197068038996832,"adresse":"92410 VILLE D AVRAY","tel":"0147090581","statut":"Non concerné","lits":214,"urgences":true,"taux_occupation":86},{"finess":"920690278","nom":"HDJ  LES LIERRES","categorie":"Maison de Santé pour Maladies Mentales","lat":48.8204183437288,"lon":2.2143644119868435,"adresse":"92310 SEVRES","tel":"0145340161","statut":"Etab de santé privé non lucrat","lits":760,"urgences":true,"taux_occupation":78},{"finess":"920710951","nom":"HDJ FONTENAY AUX ROSES","categorie":"Maison de Santé pour Maladies Mentales","lat":48.78921020492447,"lon":2.2987078751926475,"adresse":"92260 FONTENAY AUX ROSES","tel":"0146612805","statut":"Etab de santé privé non lucrat","lits":728,"urgences":true,"taux_occupation":95},{"finess":"920718277","nom":"HDJ SURESNES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.86651292419358,"lon":2.223838805970737,"adresse":"92150 SURESNES","tel":"0145061510","statut":"Etablissement public de santé","lits":87,"urgences":true,"taux_occupation":65},{"finess":"920801172","nom":"CDS DENTAIRE BOULOGNE","categorie":"Centre de Santé","lat":48.83075592678903,"lon":2.243945711113505,"adresse":"92100 BOULOGNE BILLANCOURT","tel":"0146942950","statut":"","lits":372,"urgences":true,"taux_occupation":80},{"finess":"920804663","nom":"CSS SURESNES","categorie":"Centre de santé sexuelle","lat":48.87164819024628,"lon":2.2253587613299133,"adresse":"92150 SURESNES","tel":"0147722917","statut":"","lits":168,"urgences":true,"taux_occupation":92},{"finess":"920807294","nom":"CH DE NUIT LES GOULVENTS","categorie":"Centre Hospitalier (C.H.)","lat":48.890235966212586,"lon":2.190438100991925,"adresse":"92000 NANTERRE","tel":"0147212947","statut":"Etablissement public de santé","lits":51,"urgences":false,"taux_occupation":94},{"finess":"920808193","nom":"HDJ PRESIDENT WILSON","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.89486132724454,"lon":2.2879827376014865,"adresse":"92300 LEVALLOIS PERRET","tel":"0141066390","statut":"Etablissement public de santé","lits":523,"urgences":true,"taux_occupation":63},{"finess":"920808920","nom":"HDJ LE PARC NANTERRE","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.89243200192266,"lon":2.1973625438498177,"adresse":"92000 NANTERRE","tel":"0147210742","statut":"Etablissement public de santé","lits":242,"urgences":false,"taux_occupation":83},{"finess":"920809837","nom":"HDJ DE NANTERRE","categorie":"Centre Hospitalier (C.H.)","lat":48.91262782447662,"lon":2.223217942920081,"adresse":"92014 NANTERRE CEDEX","tel":"0147696661","statut":"Etablissement public de santé","lits":687,"urgences":true,"taux_occupation":88},{"finess":"920810496","nom":"HDJ GENNEVILLIERS","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.91751167686779,"lon":2.298220689816598,"adresse":"92230 GENNEVILLIERS","tel":"0141322530","statut":"Etablissement public de santé","lits":102,"urgences":true,"taux_occupation":77},{"finess":"920811635","nom":"CAS POUR ADOLESCENTS DE SURESNES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.865692654708994,"lon":2.202624781827079,"adresse":"92150 SURESNES","tel":"0142042749","statut":"Etablissement public de santé","lits":612,"urgences":true,"taux_occupation":78},{"finess":"920811809","nom":"CDS DENTAIRE","categorie":"Centre de Santé","lat":48.93353125073621,"lon":2.2992016543758456,"adresse":"92230 GENNEVILLIERS","tel":"","statut":"","lits":498,"urgences":false,"taux_occupation":91},{"finess":"920812344","nom":"HDJ COURBEVOIE","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.90111171785979,"lon":2.253726320086745,"adresse":"92400 COURBEVOIE","tel":"0147685415","statut":"Etablissement public de santé","lits":174,"urgences":true,"taux_occupation":75},{"finess":"920812872","nom":"CENTRE THOMAS LEMAITRE","categorie":"Centre Hospitalier (C.H.)","lat":48.88887196419928,"lon":2.193013708499483,"adresse":"92000 NANTERRE","tel":"0147214244","statut":"Etablissement public de santé","lits":776,"urgences":true,"taux_occupation":79},{"finess":"920813003","nom":"HDJ CMP JOAN RIVIERE","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.81678126890863,"lon":2.3095209817766125,"adresse":"92120 MONTROUGE","tel":"0142117886","statut":"Etablissement public de santé","lits":614,"urgences":true,"taux_occupation":95},{"finess":"920813599","nom":"HAD CENTRE HOSPITALIER RIVES DE SEINE","categorie":"Centre Hospitalier (C.H.)","lat":48.89070438671733,"lon":2.261803479401344,"adresse":"92205 NEUILLY SUR SEINE CEDEX","tel":"0149043030","statut":"Etablissement public de santé","lits":467,"urgences":true,"taux_occupation":74},{"finess":"920813995","nom":"HDJ CMP CATTP DES VALLEES","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.76452157650716,"lon":2.279590699100956,"adresse":"92290 CHATENAY MALABRY","tel":"0142117845","statut":"Etablissement public de santé","lits":166,"urgences":true,"taux_occupation":67},{"finess":"920814001","nom":"HDJ DUPONT","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.92074700311348,"lon":2.282668145446737,"adresse":"92600 ASNIERES SUR SEINE","tel":"0141322435","statut":"Etablissement public de santé","lits":713,"urgences":true,"taux_occupation":91},{"finess":"920814019","nom":"HDJ LES CATALPAS","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.847184841142784,"lon":2.2184741765019123,"adresse":"92210 ST CLOUD","tel":"0147711877","statut":"Etablissement public de santé","lits":783,"urgences":true,"taux_occupation":92},{"finess":"920814027","nom":"HDJ COURTIER","categorie":"Centre Hospitalier Spécialisé lutte Maladies Menta","lat":48.81302596228331,"lon":2.296959078038688,"adresse":"92240 MALAKOFF","tel":"0142530040","statut":"Etablissement public de santé","lits":772,"urgences":true,"taux_occupation":86},{"finess":"920815123","nom":"HDJ L ELAN RETROUVE  MALAKOFF","categorie":"Maison de Santé pour Maladies Mentales","lat":48.81414486103933,"lon":2.2809383933590994,"adresse":"92240 MALAKOFF","tel":"0141080502","statut":"Etablissement de santé privé d","lits":544,"urgences":true,"taux_occupation":75}]};
+
+// === STATE ===
+let currentTerritoire = '92';
+let mapInstance = null;
+
+// === SETUP ===
+function setTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  
+  if (window.innerWidth < 1024) document.querySelector('.sidebar').classList.remove('open');
+  
+  // Lazy init des charts/cartes
+  if (tab === 'cartographie' && !mapInstance) setTimeout(initMap, 100);
+  if (tab === 'pathologies') setTimeout(renderPathologies, 100);
+  if (tab === 'medecins') setTimeout(renderMedecinsCharts, 100);
+  if (tab === 'hopitaux') renderHopitaux();
+  if (tab === 'deserts') renderDeserts();
+  if (tab === 'prevision') setTimeout(renderRetraites, 100);
+}
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => setTab(el.dataset.tab));
+});
+
+document.getElementById('mobile-menu').addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.toggle('open');
+});
+
+document.getElementById('select-territoire').addEventListener('change', e => {
+  currentTerritoire = e.target.value;
+  renderDashboard();
+});
+
+// === DASHBOARD ===
+function getCurrent() {
+  if (currentTerritoire === '92') {
+    // Agrégé 92
+    const total_pop = TERRITOIRE.communes.reduce((s, c) => s + c.pop, 0);
+    const total_pros = TERRITOIRE.communes.reduce((s, c) => s + c.total_pros, 0);
+    const total_gen = TERRITOIRE.communes.reduce((s, c) => s + c.generalistes, 0);
+    return {
+      nom: 'Hauts-de-Seine',
+      pop: total_pop, total_pros, generalistes: total_gen,
+      densite_gen: (total_gen * 1000 / total_pop).toFixed(2),
+      indice_acces_soins: 78,
+      age_moyen_medecins: 53,
+      medecins_retraite_5ans: TERRITOIRE.communes.reduce((s,c) => s + c.medecins_retraite_5ans, 0)
+    };
+  }
+  return TERRITOIRE.communes.find(c => c.code === currentTerritoire);
+}
+
+function renderDashboard() {
+  const t = getCurrent();
+  document.getElementById('territoire-name').textContent = `${t.nom} — Vue d'ensemble`;
+  document.getElementById('kpi-pop').textContent = t.pop.toLocaleString('fr-FR');
+  document.getElementById('kpi-pros').textContent = t.total_pros.toLocaleString('fr-FR');
+  document.getElementById('kpi-gen').textContent = t.generalistes;
+  document.getElementById('kpi-gen-densite').textContent = `${t.densite_gen} pour 1 000 hab.`;
+  document.getElementById('kpi-indice').textContent = t.indice_acces_soins + '/100';
+  document.getElementById('kpi-indice-bar').style.width = t.indice_acces_soins + '%';
+  document.getElementById('age-moyen').textContent = t.age_moyen_medecins;
+  document.getElementById('retraite5ans').textContent = t.medecins_retraite_5ans;
+  document.getElementById('kpi-hops').textContent = TERRITOIRE.hopitaux.length;
+  
+  renderDensiteChart();
+  renderAgesChart();
+}
+
+let chartDensite = null, chartAges = null;
+function renderDensiteChart() {
+  const top = [...TERRITOIRE.communes].sort((a,b) => a.densite_gen - b.densite_gen).slice(0, 12);
+  
+  if (chartDensite) chartDensite.destroy();
+  chartDensite = new Chart(document.getElementById('chart-densite'), {
+    type: 'bar',
+    data: {
+      labels: top.map(c => c.nom),
+      datasets: [{
+        label: 'Densité / 1000 hab.',
+        data: top.map(c => c.densite_gen),
+        backgroundColor: top.map(c => c.densite_gen < 1 ? '#E74C3C' : c.densite_gen < 1.5 ? '#F39C12' : '#27AE60'),
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+    }
+  });
+}
+
+function renderAgesChart() {
+  if (chartAges) chartAges.destroy();
+  chartAges = new Chart(document.getElementById('chart-ages'), {
+    type: 'doughnut',
+    data: {
+      labels: ['28-40 ans', '41-50 ans', '51-60 ans', '61+ ans'],
+      datasets: [{
+        data: [18, 22, 32, 28],
+        backgroundColor: ['#27AE60', '#2BA89A', '#F39C12', '#E74C3C'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { padding: 12, font: { size: 12 } } } }
+    }
+  });
+}
+
+// === CARTOGRAPHIE ===
+function initMap() {
+  if (mapInstance) return;
+  mapInstance = L.map('map').setView([48.85, 2.25], 11);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© OSM · © CARTO', subdomains: 'abcd', maxZoom: 19
+  }).addTo(mapInstance);
+  
+  // Communes (cercles colorés selon densité)
+  TERRITOIRE.communes.forEach(c => {
+    const color = c.densite_gen < 1 ? '#E74C3C' : c.densite_gen < 1.5 ? '#F39C12' : '#27AE60';
+    L.circleMarker([c.lat, c.lon], {
+      radius: Math.max(8, Math.min(30, Math.sqrt(c.pop) / 30)),
+      fillColor: color, color: 'white', weight: 2, opacity: 1, fillOpacity: 0.7
+    }).bindPopup(`
+      <div style="font-family:system-ui;min-width:200px;">
+        <b style="color:#2B3F7A;font-size:14px;">${c.nom}</b><br>
+        <span style="color:#666;font-size:12px;">${c.pop.toLocaleString('fr-FR')} habitants</span>
+        <hr style="margin:8px 0;border:none;border-top:1px solid #eee;">
+        <b>${c.generalistes}</b> généralistes<br>
+        Densité: <b style="color:${color};">${c.densite_gen}</b> / 1k hab.<br>
+        Indice accès: <b>${c.indice_acces_soins}/100</b>
+      </div>
+    `).addTo(mapInstance);
+  });
+  
+  // Hôpitaux (markers bleus)
+  TERRITOIRE.hopitaux.slice(0, 50).forEach(h => {
+    const icon = L.divIcon({
+      html: `<div style="background:#2B3F7A;width:24px;height:24px;border-radius:6px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:13px;box-shadow:0 2px 4px rgba(0,0,0,0.3);">H</div>`,
+      iconSize: [24, 24], iconAnchor: [12, 12], className: ''
+    });
+    L.marker([h.lat, h.lon], { icon }).bindPopup(`
+      <div style="font-family:system-ui;min-width:220px;">
+        <b style="color:#2B3F7A;">${h.nom}</b><br>
+        <span style="color:#666;font-size:12px;">${h.categorie}</span><br>
+        <hr style="margin:6px 0;border:none;border-top:1px solid #eee;">
+        ${h.lits} lits · Taux d'occupation: ${h.taux_occupation}%<br>
+        ${h.urgences ? '🚨 Urgences ouvertes 24/7' : ''}
+      </div>
+    `).addTo(mapInstance);
+  });
+}
+
+// === PATHOLOGIES ===
+let chartPatho = null;
+function renderPathologies() {
+  const t = getCurrent();
+  let pathoTotal;
+  if (currentTerritoire === '92') {
+    pathoTotal = {
+      diabete_type2: 0, hypertension: 0, asthme: 0, depression: 0, maladies_cardiovasculaires: 0, cancers: 0
+    };
+    TERRITOIRE.communes.forEach(c => {
+      Object.keys(pathoTotal).forEach(k => pathoTotal[k] += c.pathologies[k]);
+    });
+  } else {
+    pathoTotal = t.pathologies;
+  }
+  
+  const labels = ['Hypertension', 'Diabète T2', 'Dépression', 'Asthme', 'Maladies CV', 'Cancers'];
+  const data = [pathoTotal.hypertension, pathoTotal.diabete_type2, pathoTotal.depression,
+                pathoTotal.asthme, pathoTotal.maladies_cardiovasculaires, pathoTotal.cancers];
+  
+  if (chartPatho) chartPatho.destroy();
+  chartPatho = new Chart(document.getElementById('chart-pathologies'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: ['#E74C3C', '#F39C12', '#9B59B6', '#3498DB', '#E91E63', '#34495E'],
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false } }
+    }
+  });
+  
+  // List
+  document.getElementById('patho-list').innerHTML = labels.map((l, i) => {
+    const pop = t.pop || TERRITOIRE.communes.reduce((s,c) => s+c.pop, 0);
+    const pct = (data[i] / pop * 100).toFixed(1);
+    return `
+      <div>
+        <div class="flex justify-between mb-1">
+          <span class="font-semibold">${l}</span>
+          <span class="font-bold" style="color: var(--bleu);">${data[i].toLocaleString('fr-FR')} (${pct}%)</span>
+        </div>
+        <div class="severity-bar"><div class="severity-fill" style="width: ${Math.min(pct*5,100)}%; background: var(--teal);"></div></div>
+      </div>
+    `;
+  }).join('');
+}
+
+// === MÉDECINS ===
+let chartProf = null, chartPyr = null;
+function renderMedecinsCharts() {
+  // Répartition profession
+  const t = getCurrent();
+  let counts;
+  if (currentTerritoire === '92') {
+    counts = {
+      medecins: TERRITOIRE.communes.reduce((s,c) => s+c.medecins, 0),
+      pharmaciens: TERRITOIRE.communes.reduce((s,c) => s+c.pharmaciens, 0),
+      infirmiers: TERRITOIRE.communes.reduce((s,c) => s+c.infirmiers, 0),
+      kines: TERRITOIRE.communes.reduce((s,c) => s+c.kines, 0),
+      dentistes: TERRITOIRE.communes.reduce((s,c) => s+c.dentistes, 0),
+      sages_femmes: TERRITOIRE.communes.reduce((s,c) => s+c.sages_femmes, 0),
+    };
+  } else {
+    counts = t;
+  }
+  
+  if (chartProf) chartProf.destroy();
+  chartProf = new Chart(document.getElementById('chart-professions'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Médecins', 'Pharmaciens', 'Infirmiers', 'Kinés', 'Dentistes', 'Sages-femmes'],
+      datasets: [{
+        data: [counts.medecins, counts.pharmaciens, counts.infirmiers, counts.kines, counts.dentistes, counts.sages_femmes],
+        backgroundColor: ['#2B3F7A', '#2BA89A', '#3498DB', '#F39C12', '#9B59B6', '#E91E63'],
+        borderWidth: 0
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: { legend: { position: 'right', labels: { font: { size: 11 }, padding: 10 } } } }
+  });
+  
+  // Pyramide
+  if (chartPyr) chartPyr.destroy();
+  chartPyr = new Chart(document.getElementById('chart-pyramide'), {
+    type: 'bar',
+    data: {
+      labels: ['28-35', '36-42', '43-49', '50-56', '57-62', '63-70'],
+      datasets: [{
+        label: '2026',
+        data: [12, 20, 24, 28, 22, 18],
+        backgroundColor: '#2BA89A',
+        borderRadius: 6
+      },{
+        label: 'Projection 2030',
+        data: [8, 14, 18, 22, 28, 24],
+        backgroundColor: '#E74C3C',
+        borderRadius: 6
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } } }
+  });
+}
+
+// === HÔPITAUX ===
+function renderHopitaux() {
+  document.getElementById('hop-tbody').innerHTML = TERRITOIRE.hopitaux.slice(0, 30).map(h => {
+    const occColor = h.taux_occupation > 90 ? 'var(--rouge)' : h.taux_occupation > 75 ? 'var(--orange)' : 'var(--vert)';
+    return `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="p-3"><b style="color: var(--bleu);">${h.nom}</b><br><span class="text-xs text-gray-500">${h.adresse}</span></td>
+        <td class="p-3 text-xs">${h.categorie}</td>
+        <td class="p-3 text-right font-semibold">${h.lits}</td>
+        <td class="p-3 text-center">${h.urgences ? '✅' : '—'}</td>
+        <td class="p-3 text-right font-bold" style="color: ${occColor};">${h.taux_occupation}%</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// === DÉSERTS ===
+function renderDeserts() {
+  const critiques = [...TERRITOIRE.communes]
+    .sort((a,b) => a.densite_gen - b.densite_gen)
+    .slice(0, 8);
+  
+  document.getElementById('deserts-list').innerHTML = critiques.map(c => {
+    const sev = c.densite_gen < 1 ? 'critique' : c.densite_gen < 1.5 ? 'modéré' : 'limite';
+    const color = c.densite_gen < 1 ? 'var(--rouge)' : c.densite_gen < 1.5 ? 'var(--orange)' : 'var(--vert)';
+    return `
+      <div class="bg-white rounded-2xl p-5 border-l-4" style="border-color: ${color};">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <h3 class="display font-bold text-lg" style="color: var(--bleu);">${c.nom}</h3>
+              <span class="badge ${c.densite_gen < 1 ? 'heat-low' : c.densite_gen < 1.5 ? 'heat-mid' : 'heat-high'} text-xs uppercase font-bold px-2 py-1 rounded-full">${sev}</span>
+            </div>
+            <p class="text-sm" style="color: #666;">${c.pop.toLocaleString('fr-FR')} habitants · ${c.generalistes} généralistes</p>
+          </div>
+          <div class="text-right">
+            <p class="display text-2xl font-extrabold" style="color: ${color};">${c.densite_gen}</p>
+            <p class="text-xs" style="color: #888;">/ 1 000 hab.</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// === RETRAITES ===
+let chartRet = null;
+function renderRetraites() {
+  if (chartRet) chartRet.destroy();
+  chartRet = new Chart(document.getElementById('chart-retraites'), {
+    type: 'line',
+    data: {
+      labels: ['2026', '2027', '2028', '2029', '2030'],
+      datasets: [{
+        label: 'Départs cumulés',
+        data: [22, 50, 75, 95, 110],
+        borderColor: '#E74C3C',
+        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+        fill: true,
+        tension: 0.4,
+        borderWidth: 3
+      }, {
+        label: 'Nouveaux installés',
+        data: [12, 25, 40, 58, 80],
+        borderColor: '#27AE60',
+        backgroundColor: 'rgba(39, 174, 96, 0.1)',
+        fill: true,
+        tension: 0.4,
+        borderWidth: 3
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+
+// === Map layer buttons ===
+document.querySelectorAll('.map-layer-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.map-layer-btn').forEach(b => {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--bleu)';
+    });
+    btn.style.background = 'var(--teal)';
+    btn.style.color = 'white';
+  });
+  if (btn.classList.contains('active')) {
+    btn.style.background = 'var(--teal)';
+    btn.style.color = 'white';
+  } else {
+    btn.style.color = 'var(--bleu)';
+  }
+});
+
+// === INIT ===
+document.addEventListener('DOMContentLoaded', () => {
+  renderDashboard();
+});
+</script>
+
+</body>
+</html>
